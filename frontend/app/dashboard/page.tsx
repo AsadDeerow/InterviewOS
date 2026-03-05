@@ -17,12 +17,13 @@ export default function DashboardPage() {
 
   function handleLogout() {
     localStorage.removeItem("token");
+    sessionStorage.removeItem("token");
     router.push("/login");
   }
 
   useEffect(() => {
     async function loadDashboard() {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("token") ?? sessionStorage.getItem("token");
 
       if (!token) {
         router.push("/login");
@@ -39,6 +40,7 @@ export default function DashboardPage() {
 
         if (res.status === 401) {
           localStorage.removeItem("token");
+          sessionStorage.removeItem("token");
           router.push("/login");
           return;
         }
@@ -72,10 +74,10 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <section className="mx-auto max-w-2xl">
-        <Card>
+        <Card className="border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#1e293b] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
           <CardHeader>
-            <CardTitle>Dashboard</CardTitle>
-            <CardDescription>Loading your session...</CardDescription>
+            <CardTitle className="text-[var(--heading)] dark:text-[#f8fafc]">Dashboard</CardTitle>
+            <CardDescription className="text-[var(--muted-foreground)] dark:text-[#9ca3af]">Loading your session...</CardDescription>
           </CardHeader>
         </Card>
       </section>
@@ -84,11 +86,11 @@ export default function DashboardPage() {
 
   return (
     <section className="mx-auto max-w-3xl">
-      <Card>
+      <Card className="border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#1e293b] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Dashboard</CardTitle>
-            <CardDescription>Your authenticated workspace is active.</CardDescription>
+            <CardTitle className="text-[var(--heading)] dark:text-[#f8fafc]">Dashboard</CardTitle>
+            <CardDescription className="text-[var(--muted-foreground)] dark:text-[#9ca3af]">Your authenticated workspace is active.</CardDescription>
           </div>
           <Button variant="outline" onClick={handleLogout}>
             Logout

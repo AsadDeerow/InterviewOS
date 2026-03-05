@@ -7,13 +7,13 @@ type ButtonSize = "default" | "sm" | "lg" | "icon";
 
 const variantClasses: Record<ButtonVariant, string> = {
   default:
-    "bg-primary-600 text-white shadow-sm hover:bg-primary-700 focus-visible:outline-primary-400 dark:bg-primary-500 dark:hover:bg-primary-400",
+    "bg-[var(--brand-primary)] text-white shadow-sm hover:bg-[var(--brand-primary-hover)] focus-visible:outline-primary-400",
   secondary:
     "bg-primary-50 text-primary-900 hover:bg-primary-100 focus-visible:outline-primary-400 dark:bg-primary-950 dark:text-primary-100 dark:hover:bg-primary-900",
   ghost:
-    "text-slate-700 hover:bg-primary-50 hover:text-primary-900 focus-visible:outline-primary-400 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white",
+    "text-[var(--foreground)] hover:bg-primary-50 hover:text-[var(--heading)] focus-visible:outline-primary-400 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white",
   outline:
-    "border border-primary-200 bg-white text-primary-900 hover:bg-primary-50 focus-visible:outline-primary-400 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800",
+    "border border-primary-200 bg-white text-[var(--foreground)] hover:bg-primary-50 hover:text-[var(--heading)] focus-visible:outline-primary-400 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800",
   destructive:
     "bg-red-600 text-white hover:bg-red-500 focus-visible:outline-red-400",
 };

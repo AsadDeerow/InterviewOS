@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Inter } from "next/font/google";
+import { AuthNavLinks } from "@/components/auth-nav-links";
 import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 
@@ -20,21 +21,20 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} text-slate-900 antialiased`}>
+      <body className={`${inter.variable} antialiased`}>
         <div className="min-h-screen">
-          <header className="border-b border-white/60 bg-white/70 backdrop-blur">
+          <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-md dark:border-white/10 dark:bg-[#0f172a]/90">
             <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-              <Link href="/" className="text-xl font-semibold tracking-tight text-slate-900">
-                InterviewOS <span className="text-xs text-slate-500">beta</span>
+              <Link href="/" className="group flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--brand-primary)] shadow-[0_0_12px_rgba(107,114,128,0.35)] transition group-hover:scale-110 dark:bg-[#3b82f6] dark:shadow-[0_0_18px_rgba(59,130,246,0.45)]" />
+                <span className="text-xl font-semibold tracking-tight text-[var(--heading)] dark:text-[var(--heading)]">InterviewOS</span>
+                <span className="hidden rounded-full border border-slate-300 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-[var(--muted-foreground)] dark:border-white/10 dark:text-[var(--muted-foreground)] sm:inline-block">
+                  beta
+                </span>
               </Link>
 
-              <nav className="flex items-center gap-2 text-sm">
-                <Link href="/login" className="rounded-md px-3 py-2 text-slate-700 transition hover:bg-white hover:text-slate-950">
-                  Login
-                </Link>
-                <Link href="/register" className="rounded-md px-3 py-2 text-slate-700 transition hover:bg-white hover:text-slate-950">
-                  Register
-                </Link>
+              <nav className="flex items-center gap-3 text-sm">
+                <AuthNavLinks />
                 <ThemeToggle />
               </nav>
             </div>
