@@ -7,13 +7,16 @@ import { AuthNavLinks } from "@/components/auth-nav-links";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { fetchWithCsrf } from "@/lib/csrf";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL!;
 const publicRoutes = new Set(["/", "/login", "/register"]);
 
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -39,10 +42,18 @@ export function AppHeader() {
   const showAuthLinks = publicRoutes.has(pathname);
   const showLogout = !showAuthLinks;
 
-  function handleLogout() {
-    localStorage.removeItem("token");
-    sessionStorage.removeItem("token");
-    router.push("/login");
+  async function handleLogout() {
+    setLoggingOut(true);
+
+    try {
+      await fetchWithCsrf(API_BASE, `${API_BASE}/api/auth/logout`, {
+        method: "POST",
+      });
+    } finally {
+      router.push("/login");
+      router.refresh();
+      setLoggingOut(false);
+    }
   }
 
   return (
@@ -64,8 +75,8 @@ export function AppHeader() {
         <nav className="flex items-center gap-3 text-sm">
           {showAuthLinks ? <AuthNavLinks /> : null}
           {showLogout ? (
-            <Button variant="outline" onClick={handleLogout}>
-              Logout
+            <Button variant="outline" onClick={handleLogout} disabled={loggingOut}>
+              {loggingOut ? "Logging out..." : "Logout"}
             </Button>
           ) : null}
           <ThemeToggle />

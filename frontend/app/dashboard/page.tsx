@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchWithCsrf } from "@/lib/csrf";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL!;
 
@@ -19,6 +20,10 @@ type InterviewSessionResponse = {
   sessionId: number;
   role: InterviewRole;
   questions: InterviewQuestion[];
+};
+
+type ApiResponse = {
+  message?: string;
 };
 
 const roleLabels: Record<InterviewRole, string> = {
@@ -36,47 +41,33 @@ export default function DashboardPage() {
   const [startingInterview, setStartingInterview] = useState(false);
   const [activeSession, setActiveSession] = useState<InterviewSessionResponse | null>(null);
 
-  const getToken = useCallback(() => {
-    return localStorage.getItem("token") ?? sessionStorage.getItem("token");
-  }, []);
-
-  const clearAuthAndRedirect = useCallback(() => {
-    localStorage.removeItem("token");
-    sessionStorage.removeItem("token");
+  const redirectToLogin = useCallback(() => {
     router.push("/login");
   }, [router]);
 
   async function handleStartInterview() {
-    const token = getToken();
-
-    if (!token) {
-      clearAuthAndRedirect();
-      return;
-    }
-
     setStartingInterview(true);
     setError("");
     setActiveSession(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/interviews/start`, {
+      const res = await fetchWithCsrf(API_BASE, `${API_BASE}/api/interviews/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ role: selectedRole }),
       });
 
-      let data: { message?: string } | InterviewSessionResponse = { message: "Could not start interview." };
+      let data: ApiResponse | InterviewSessionResponse = { message: "Could not start interview." };
       try {
-        data = await res.json();
+        data = (await res.json()) as ApiResponse | InterviewSessionResponse;
       } catch {
         data = { message: "Could not start interview." };
       }
 
       if (res.status === 401) {
-        clearAuthAndRedirect();
+        redirectToLogin();
         return;
       }
 
@@ -95,23 +86,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadDashboard() {
-      const token = getToken();
-
-      if (!token) {
-        clearAuthAndRedirect();
-        return;
-      }
-
       try {
         const res = await fetch(`${API_BASE}/api/health`, {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: "include",
         });
 
         if (res.status === 401) {
-          clearAuthAndRedirect();
+          redirectToLogin();
           return;
         }
 
@@ -127,7 +109,7 @@ export default function DashboardPage() {
     }
 
     loadDashboard();
-  }, [clearAuthAndRedirect, getToken]);
+  }, [redirectToLogin]);
 
   if (loading) {
     return (

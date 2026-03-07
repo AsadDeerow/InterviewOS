@@ -14,12 +14,18 @@ public class LoginRequest {
     @Size(min = 8, max = 128)
     private String password;
 
+    private boolean rememberMe;
+
     public String getEmail() {
         return email;
     }
 
     public String getPassword() {
         return password;
+    }
+
+    public boolean isRememberMe() {
+        return rememberMe;
     }
 
     public void setEmail(String email) {
@@ -29,5 +35,9 @@ public class LoginRequest {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public void setRememberMe(boolean rememberMe) {
+        this.rememberMe = rememberMe;
     }
 }

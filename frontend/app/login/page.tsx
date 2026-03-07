@@ -3,8 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { fetchWithCsrf } from "@/lib/csrf";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL!;
+
+type ApiResponse = {
+  message?: string;
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,41 +26,28 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetchWithCsrf(API_BASE, `${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe }),
       });
 
-      let data: unknown = {};
+      let data: ApiResponse = {};
       try {
-        data = await res.json();
+        data = (await res.json()) as ApiResponse;
       } catch {
         data = {};
       }
 
-      const token = (data as { token?: string }).token;
-
-      if (res.status === 401) {
-        setError("Invalid email or password");
+      if (!res.ok) {
+        setError(data.message || "Login failed. Please try again.");
         return;
       }
 
-      if (!res.ok || !token) {
-        setError("Login failed. Please try again.");
-        return;
-      }
-
-      if (rememberMe) {
-        localStorage.setItem("token", token);
-        sessionStorage.removeItem("token");
-      } else {
-        sessionStorage.setItem("token", token);
-        localStorage.removeItem("token");
-      }
       router.push("/dashboard");
+      router.refresh();
     } catch {
       setError("Network error. Please try again later.");
     } finally {

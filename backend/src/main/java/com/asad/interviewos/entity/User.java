@@ -21,6 +21,12 @@ public class User {
     private String subscriptionStatus = "FREE";
 
     @Column(nullable = false)
+    private boolean enabled = true;
+
+    @Column(nullable = false)
+    private int tokenVersion = 0;
+
+    @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public User() {}
@@ -38,6 +44,10 @@ public class User {
 
     public String getSubscriptionStatus() { return subscriptionStatus; }
 
+    public boolean isEnabled() { return enabled; }
+
+    public int getTokenVersion() { return tokenVersion; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
 
     public void setEmail(String email) { this.email = email; }
@@ -46,5 +56,13 @@ public class User {
 
     public void setSubscriptionStatus(String subscriptionStatus) {
         this.subscriptionStatus = subscriptionStatus;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public void setTokenVersion(int tokenVersion) {
+        this.tokenVersion = tokenVersion;
     }
 }

@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { fetchWithCsrf } from "@/lib/csrf";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL!;
 
-type LoginResponse = {
-  token?: string;
+type ApiResponse = {
+  message?: string;
 };
 
 export default function RegisterPage() {
@@ -30,7 +31,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const registerRes = await fetch(`${API_BASE}/api/auth/register`, {
+      const registerRes = await fetchWithCsrf(API_BASE, `${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -38,38 +39,34 @@ export default function RegisterPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      if (registerRes.status === 409) {
-        setError("An account with this email already exists.");
-        return;
+      let registerData: ApiResponse = {};
+      try {
+        registerData = (await registerRes.json()) as ApiResponse;
+      } catch {
+        registerData = {};
       }
 
       if (!registerRes.ok) {
-        setError("Registration failed. Please try again.");
+        setError(registerData.message || "Registration failed. Please try again.");
         return;
       }
 
-      const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+      const loginRes = await fetchWithCsrf(API_BASE, `${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe: true }),
       });
 
-      let loginData: LoginResponse = {};
-      try {
-        loginData = await loginRes.json();
-      } catch {
-        loginData = {};
-      }
-
-      if (!loginRes.ok || !loginData.token) {
+      if (!loginRes.ok) {
         router.push("/login");
+        router.refresh();
         return;
       }
 
-      localStorage.setItem("token", loginData.token);
       router.push("/dashboard");
+      router.refresh();
     } catch {
       setError("Could not reach the server. Please try again.");
     } finally {
