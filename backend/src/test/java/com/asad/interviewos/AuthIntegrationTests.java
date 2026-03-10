@@ -1,5 +1,6 @@
 package com.asad.interviewos;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.asad.interviewos.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.jpa.defer-datasource-initialization=true",
+        "spring.sql.init.mode=always",
         "jwt.secret=01234567890123456789012345678901"
 })
 class AuthIntegrationTests {
@@ -34,6 +37,9 @@ class AuthIntegrationTests {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void cleanDatabase() {
@@ -96,5 +102,44 @@ class AuthIntegrationTests {
     void protectedEndpointWithoutTokenReturnsUnauthorized() throws Exception {
         mockMvc.perform(get("/api/health"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void startInterviewReturnsThreeQuestionsForRole() throws Exception {
+        String registerBody = """
+                {"email":"interview@example.com","password":"password123"}
+                """;
+        String loginBody = """
+                {"email":"interview@example.com","password":"password123"}
+                """;
+        String startBody = """
+                {"role":"BACKEND_ENGINEER"}
+                """;
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody))
+                .andExpect(status().isCreated());
+
+        String token = objectMapper.readTree(
+                        mockMvc.perform(post("/api/auth/login")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(loginBody))
+                                .andExpect(status().isOk())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString()
+                )
+                .get("token")
+                .asText();
+
+        mockMvc.perform(post("/api/interviews/start")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(startBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sessionId").isNumber())
+                .andExpect(jsonPath("$.role").value("BACKEND_ENGINEER"))
+                .andExpect(jsonPath("$.questions.length()").value(3));
     }
 }
