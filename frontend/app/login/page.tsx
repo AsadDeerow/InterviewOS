@@ -6,6 +6,11 @@ import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL!;
 
+type LoginResponse = {
+  token?: string;
+  message?: string;
+};
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -29,33 +34,28 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      let data: unknown = {};
+      let data: LoginResponse = {};
       try {
-        data = await res.json();
+        data = (await res.json()) as LoginResponse;
       } catch {
         data = {};
       }
 
-      const token = (data as { token?: string }).token;
-
-      if (res.status === 401) {
-        setError("Invalid email or password");
-        return;
-      }
-
-      if (!res.ok || !token) {
-        setError("Login failed. Please try again.");
+      if (!res.ok || !data.token) {
+        setError(data.message || "Login failed. Please try again.");
         return;
       }
 
       if (rememberMe) {
-        localStorage.setItem("token", token);
+        localStorage.setItem("token", data.token);
         sessionStorage.removeItem("token");
       } else {
-        sessionStorage.setItem("token", token);
+        sessionStorage.setItem("token", data.token);
         localStorage.removeItem("token");
       }
+
       router.push("/dashboard");
+      router.refresh();
     } catch {
       setError("Network error. Please try again later.");
     } finally {

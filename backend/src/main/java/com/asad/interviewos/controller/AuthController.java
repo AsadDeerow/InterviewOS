@@ -5,9 +5,7 @@ import com.asad.interviewos.dto.RegisterRequest;
 import com.asad.interviewos.entity.User;
 import com.asad.interviewos.repository.UserRepository;
 import com.asad.interviewos.security.JwtService;
-
 import jakarta.validation.Valid;
-
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,7 +31,6 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
-
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             return ResponseEntity
                     .status(409)
@@ -41,7 +38,6 @@ public class AuthController {
         }
 
         String hashedPassword = passwordEncoder.encode(request.getPassword());
-
         User user = new User(request.getEmail(), hashedPassword);
 
         try {
@@ -59,9 +55,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
-
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElse(null);
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
 
         if (user == null) {
             return ResponseEntity
@@ -76,10 +70,6 @@ public class AuthController {
         }
 
         String token = jwtService.generateToken(user.getEmail());
-
-        return ResponseEntity.ok(
-                Map.of("token", token)
-        );
+        return ResponseEntity.ok(Map.of("token", token));
     }
-
 }

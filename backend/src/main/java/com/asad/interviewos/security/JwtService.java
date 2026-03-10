@@ -13,18 +13,20 @@ import java.util.Date;
 public class JwtService {
 
     private final SecretKey secretKey;
-    private static final long EXPIRATION_TIME = 1000 * 60 * 60; // 1 hour
+    private final long expirationMillis;
 
-    public JwtService(@Value("${jwt.secret}") String secret) {
+    public JwtService(@Value("${jwt.secret}") String secret,
+                      @Value("${app.auth.token.expiration-seconds:3600}") long expirationSeconds) {
         this.secretKey =
                 Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.expirationMillis = expirationSeconds * 1000;
     }
 
     public String generateToken(String email) {
         return Jwts.builder()
                 .setSubject(email)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+                .setExpiration(new Date(System.currentTimeMillis() + expirationMillis))
                 .signWith(secretKey, SignatureAlgorithm.HS256)
                 .compact();
     }

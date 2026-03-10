@@ -21,6 +21,24 @@ type InterviewSessionResponse = {
   questions: InterviewQuestion[];
 };
 
+type ApiResponse = {
+  message?: string;
+};
+
+type Evaluation = {
+  questionId: number;
+  score: number;
+  strengths: string[];
+  weaknesses: string[];
+  feedback: string;
+  modelAnswer: string;
+};
+
+type SubmitAnswersResponse = {
+  overallScore: number;
+  evaluations: Evaluation[];
+};
+
 const roleLabels: Record<InterviewRole, string> = {
   BACKEND_ENGINEER: "Backend Engineer",
   DATA_SCIENTIST: "Data Scientist",
@@ -34,7 +52,10 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [selectedRole, setSelectedRole] = useState<InterviewRole>("BACKEND_ENGINEER");
   const [startingInterview, setStartingInterview] = useState(false);
+  const [submittingAnswers, setSubmittingAnswers] = useState(false);
   const [activeSession, setActiveSession] = useState<InterviewSessionResponse | null>(null);
+  const [draftAnswers, setDraftAnswers] = useState<Record<number, string>>({});
+  const [result, setResult] = useState<SubmitAnswersResponse | null>(null);
 
   const getToken = useCallback(() => {
     return localStorage.getItem("token") ?? sessionStorage.getItem("token");
@@ -57,6 +78,7 @@ export default function DashboardPage() {
     setStartingInterview(true);
     setError("");
     setActiveSession(null);
+    setResult(null);
 
     try {
       const res = await fetch(`${API_BASE}/api/interviews/start`, {
@@ -68,9 +90,9 @@ export default function DashboardPage() {
         body: JSON.stringify({ role: selectedRole }),
       });
 
-      let data: { message?: string } | InterviewSessionResponse = { message: "Could not start interview." };
+      let data: ApiResponse | InterviewSessionResponse = { message: "Could not start interview." };
       try {
-        data = await res.json();
+        data = (await res.json()) as ApiResponse | InterviewSessionResponse;
       } catch {
         data = { message: "Could not start interview." };
       }
@@ -85,13 +107,95 @@ export default function DashboardPage() {
         return;
       }
 
-      setActiveSession(data as InterviewSessionResponse);
+      const session = data as InterviewSessionResponse;
+      setActiveSession(session);
+      setDraftAnswers(
+        Object.fromEntries(session.questions.map((question) => [question.questionId, ""])) as Record<number, string>,
+      );
     } catch {
       setError("Network error. Please try again.");
     } finally {
       setStartingInterview(false);
     }
   }
+
+  function handleAnswerChange(questionId: number, value: string) {
+    setDraftAnswers((current) => ({
+      ...current,
+      [questionId]: value,
+    }));
+  }
+
+  async function handleSubmitAnswers() {
+    if (!activeSession) {
+      return;
+    }
+
+    const token = getToken();
+
+    if (!token) {
+      clearAuthAndRedirect();
+      return;
+    }
+
+    const missingAnswer = activeSession.questions.find((question) => !(draftAnswers[question.questionId] || "").trim());
+    if (missingAnswer) {
+      setError("Answer every question before submitting.");
+      return;
+    }
+
+    setSubmittingAnswers(true);
+    setError("");
+
+    try {
+      const res = await fetch(`${API_BASE}/api/interviews/${activeSession.sessionId}/submit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          answers: activeSession.questions.map((question) => ({
+            questionId: question.questionId,
+            answerText: draftAnswers[question.questionId] || "",
+          })),
+        }),
+      });
+
+      let data: ApiResponse | SubmitAnswersResponse = { message: "Could not submit answers." };
+      try {
+        data = (await res.json()) as ApiResponse | SubmitAnswersResponse;
+      } catch {
+        data = { message: "Could not submit answers." };
+      }
+
+      if (res.status === 401) {
+        clearAuthAndRedirect();
+        return;
+      }
+
+      if (!res.ok) {
+        setError(("message" in data && data.message) || "Could not submit answers.");
+        return;
+      }
+
+      setResult(data as SubmitAnswersResponse);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSubmittingAnswers(false);
+    }
+  }
+
+  function renderFeedbackList(items: string[], emptyMessage: string) {
+    if (items.length === 0) {
+      return <li>{emptyMessage}</li>;
+    }
+
+    return items.map((item) => <li key={item}>- {item}</li>);
+  }
+
+  const evaluationsByQuestionId = new Map(result?.evaluations.map((evaluation) => [evaluation.questionId, evaluation]) ?? []);
 
   useEffect(() => {
     async function loadDashboard() {
@@ -183,9 +287,23 @@ export default function DashboardPage() {
 
           {activeSession && (
             <div className="space-y-4">
+              {result && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-slate-900/40">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)] dark:text-[#9ca3af]">
+                    Interview score
+                  </p>
+                  <div className="mt-2 flex items-end gap-3">
+                    <span className="text-4xl font-semibold text-[var(--heading)] dark:text-[#f8fafc]">
+                      {result.overallScore}
+                    </span>
+                    <span className="pb-1 text-sm text-[var(--muted-foreground)] dark:text-[#9ca3af]">out of 100</span>
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-3">
                 {activeSession.questions.map((question, index) => (
-                  <div
+                  <article
                     key={question.questionId}
                     className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900/60"
                   >
@@ -193,9 +311,78 @@ export default function DashboardPage() {
                       Question {index + 1}
                     </p>
                     <p className="mt-2 text-base text-[var(--heading)] dark:text-[#f8fafc]">{question.text}</p>
-                  </div>
+                    <div className="mt-4 space-y-3">
+                      <label
+                        htmlFor={`answer-${question.questionId}`}
+                        className="text-sm font-medium text-[var(--foreground)] dark:text-[#cbd5e1]"
+                      >
+                        Your answer
+                      </label>
+                      <textarea
+                        id={`answer-${question.questionId}`}
+                        value={draftAnswers[question.questionId] || ""}
+                        onChange={(event) => handleAnswerChange(question.questionId, event.target.value)}
+                        disabled={Boolean(result)}
+                        rows={5}
+                        placeholder="Write your answer here..."
+                        className="w-full rounded-[14px] border border-slate-300 bg-white px-3 py-3 text-sm text-[var(--foreground)] outline-none transition focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary)] dark:border-[#4b5563] dark:bg-[#374151] dark:text-white"
+                      />
+                    </div>
+
+                    {evaluationsByQuestionId.has(question.questionId) && (
+                      <div className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50/85 p-4 dark:border-white/10 dark:bg-slate-950/50">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-[var(--heading)] dark:text-[#f8fafc]">Evaluation</p>
+                          <span className="rounded-full bg-[var(--brand-primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--brand-primary)]">
+                            Score {evaluationsByQuestionId.get(question.questionId)?.score}/100
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm text-[var(--foreground)] dark:text-[#dbe4ef]">
+                          {evaluationsByQuestionId.get(question.questionId)?.feedback}
+                        </p>
+
+                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)] dark:text-[#9ca3af]">
+                              Strengths
+                            </p>
+                            <ul className="mt-2 space-y-2 text-sm text-[var(--foreground)] dark:text-[#dbe4ef]">
+                              {renderFeedbackList(
+                                evaluationsByQuestionId.get(question.questionId)?.strengths || [],
+                                "No clear strengths identified.",
+                              )}
+                            </ul>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)] dark:text-[#9ca3af]">
+                              Weaknesses
+                            </p>
+                            <ul className="mt-2 space-y-2 text-sm text-[var(--foreground)] dark:text-[#dbe4ef]">
+                              {renderFeedbackList(
+                                evaluationsByQuestionId.get(question.questionId)?.weaknesses || [],
+                                "No significant weaknesses identified.",
+                              )}
+                            </ul>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 rounded-[16px] border border-slate-200 bg-white/80 p-4 dark:border-white/10 dark:bg-slate-900/70">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)] dark:text-[#9ca3af]">
+                            Model answer
+                          </p>
+                          <p className="mt-2 text-sm text-[var(--foreground)] dark:text-[#dbe4ef]">
+                            {evaluationsByQuestionId.get(question.questionId)?.modelAnswer}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </article>
                 ))}
               </div>
+
+              <Button onClick={handleSubmitAnswers} disabled={submittingAnswers || Boolean(result)}>
+                {result ? "Interview submitted" : submittingAnswers ? "Evaluating answers..." : "Submit Answers"}
+              </Button>
             </div>
           )}
         </CardContent>

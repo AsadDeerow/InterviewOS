@@ -8,6 +8,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL!;
 
 type LoginResponse = {
   token?: string;
+  message?: string;
+};
+
+type ApiResponse = {
+  message?: string;
 };
 
 export default function RegisterPage() {
@@ -38,13 +43,15 @@ export default function RegisterPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      if (registerRes.status === 409) {
-        setError("An account with this email already exists.");
-        return;
+      let registerData: ApiResponse = {};
+      try {
+        registerData = (await registerRes.json()) as ApiResponse;
+      } catch {
+        registerData = {};
       }
 
       if (!registerRes.ok) {
-        setError("Registration failed. Please try again.");
+        setError(registerData.message || "Registration failed. Please try again.");
         return;
       }
 
@@ -58,18 +65,20 @@ export default function RegisterPage() {
 
       let loginData: LoginResponse = {};
       try {
-        loginData = await loginRes.json();
+        loginData = (await loginRes.json()) as LoginResponse;
       } catch {
         loginData = {};
       }
 
       if (!loginRes.ok || !loginData.token) {
         router.push("/login");
+        router.refresh();
         return;
       }
 
       localStorage.setItem("token", loginData.token);
       router.push("/dashboard");
+      router.refresh();
     } catch {
       setError("Could not reach the server. Please try again.");
     } finally {

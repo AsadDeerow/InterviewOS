@@ -43,6 +43,7 @@ export function AppHeader() {
     localStorage.removeItem("token");
     sessionStorage.removeItem("token");
     router.push("/login");
+    router.refresh();
   }
 
   return (
