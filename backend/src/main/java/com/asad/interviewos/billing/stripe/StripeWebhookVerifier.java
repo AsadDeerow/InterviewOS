@@ -15,7 +15,7 @@ public class StripeWebhookVerifier {
     private final long toleranceSeconds;
 
     public StripeWebhookVerifier(ObjectMapper objectMapper,
-                                 @Value("${app.billing.stripe.webhook-secret:${STRIPE_WEBHOOK_SECRET:}}") String webhookSecret,
+                                 @Value("${stripe.webhook.secret}") String webhookSecret,
                                  @Value("${app.billing.stripe.webhook-tolerance-seconds:300}") long toleranceSeconds) {
         this.objectMapper = objectMapper;
         this.webhookSecret = webhookSecret == null ? "" : webhookSecret.trim();

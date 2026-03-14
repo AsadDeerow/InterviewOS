@@ -351,6 +351,62 @@ class BillingIntegrationTests {
     }
 
     @Test
+    void stripeWebhookSubscriptionUpdatedPersistsLatestStatus() throws Exception {
+        registerUser("updated@example.com", "password123");
+        User user = userRepository.findByEmail("updated@example.com").orElseThrow();
+        user.setStripeCustomerId("cus_updated_123");
+        user.setStripeSubscriptionId("sub_updated_123");
+        user.setSubscriptionStatus("ACTIVE");
+        user.setSubscriptionPlan("BASIC");
+        user.setSubscriptionInterval("MONTHLY");
+        userRepository.save(user);
+
+        String payload = """
+                {
+                  "id": "evt_subscription_updated",
+                  "type": "customer.subscription.updated",
+                  "data": {
+                    "object": {
+                      "id": "sub_updated_123",
+                      "customer": "cus_updated_123",
+                      "status": "past_due",
+                      "metadata": {
+                        "userId": "%d",
+                        "userEmail": "updated@example.com",
+                        "plan": "pro",
+                        "interval": "yearly"
+                      },
+                      "items": {
+                        "data": [
+                          {
+                            "price": {
+                              "id": "price_test_pro_yearly",
+                              "recurring": {
+                                "interval": "year"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+                """.formatted(user.getId());
+
+        mockMvc.perform(post("/api/billing/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Stripe-Signature", stripeSignature(payload))
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.received").value(true));
+
+        User updatedUser = userRepository.findByEmail("updated@example.com").orElseThrow();
+        assertThat(updatedUser.getSubscriptionStatus()).isEqualTo("PAST_DUE");
+        assertThat(updatedUser.getSubscriptionPlan()).isEqualTo("PRO");
+        assertThat(updatedUser.getSubscriptionInterval()).isEqualTo("YEARLY");
+    }
+
+    @Test
     void stripeWebhookRejectsInvalidSignature() throws Exception {
         String payload = """
                 {"id":"evt_invalid","type":"checkout.session.completed","data":{"object":{"customer":"cus_123"}}}

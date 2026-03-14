@@ -1,11 +1,12 @@
 package com.asad.interviewos.billing.stripe;
 
-import com.stripe.StripeClient;
+import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.checkout.SessionCreateParams;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,13 +17,28 @@ import java.util.Map;
 public class StripeSdkBillingClient implements StripeBillingClient {
 
     private final String secretKey;
+    private final String baseUrl;
     private final int timeoutMillis;
 
     public StripeSdkBillingClient(
-            @Value("${app.billing.stripe.secret-key:${STRIPE_SECRET_KEY:}}") String secretKey,
+            @Value("${stripe.secret.key}") String secretKey,
+            @Value("${app.billing.stripe.base-url:https://api.stripe.com}") String baseUrl,
             @Value("${app.billing.stripe.timeout-seconds:30}") long timeoutSeconds) {
         this.secretKey = secretKey == null ? "" : secretKey.trim();
+        this.baseUrl = baseUrl == null ? "" : baseUrl.trim();
         this.timeoutMillis = Math.toIntExact(Duration.ofSeconds(timeoutSeconds).toMillis());
+    }
+
+    @PostConstruct
+    void init() {
+        ensureConfigured();
+        Stripe.apiKey = secretKey;
+        Stripe.setConnectTimeout(timeoutMillis);
+        Stripe.setReadTimeout(timeoutMillis);
+        Stripe.setMaxNetworkRetries(2);
+        if (!baseUrl.isBlank()) {
+            Stripe.overrideApiBase(baseUrl);
+        }
     }
 
     @Override
@@ -34,7 +50,7 @@ public class StripeSdkBillingClient implements StripeBillingClient {
         metadata.forEach(paramsBuilder::putMetadata);
 
         try {
-            Customer customer = stripeClient().v1().customers().create(paramsBuilder.build());
+            Customer customer = Customer.create(paramsBuilder.build());
             return new StripeCustomer(readRequiredValue(customer.getId(), "Stripe customer id"));
         } catch (StripeException ex) {
             throw new IllegalStateException("Stripe customer creation failed", ex);
@@ -64,7 +80,7 @@ public class StripeSdkBillingClient implements StripeBillingClient {
         metadata.forEach(paramsBuilder::putMetadata);
 
         try {
-            Session session = stripeClient().v1().checkout().sessions().create(paramsBuilder.build());
+            Session session = Session.create(paramsBuilder.build());
             return new StripeCheckoutSession(
                     readRequiredValue(session.getId(), "Stripe checkout session id"),
                     readRequiredValue(session.getUrl(), "Stripe checkout session url")
@@ -72,15 +88,6 @@ public class StripeSdkBillingClient implements StripeBillingClient {
         } catch (StripeException ex) {
             throw new IllegalStateException("Stripe checkout session creation failed", ex);
         }
-    }
-
-    private StripeClient stripeClient() {
-        return StripeClient.builder()
-                .setApiKey(secretKey)
-                .setConnectTimeout(timeoutMillis)
-                .setReadTimeout(timeoutMillis)
-                .setMaxNetworkRetries(2)
-                .build();
     }
 
     private SessionCreateParams.SubscriptionData buildSubscriptionData(Map<String, String> metadata) {

@@ -168,6 +168,7 @@ public class BillingService {
             case "invoice.payment_succeeded" -> handleInvoicePaymentSucceeded(eventObject);
             case "invoice.payment_failed" -> handleInvoicePaymentFailed(eventObject);
             case "customer.subscription.deleted" -> handleSubscriptionDeleted(eventObject);
+            case "customer.subscription.updated" -> handleSubscriptionUpdated(eventObject);
             default -> log.debug("Ignoring unsupported Stripe event type {}", eventType);
         }
     }
@@ -228,6 +229,16 @@ public class BillingService {
                 customerId,
                 subscriptionId
         );
+    }
+
+    private void handleSubscriptionUpdated(JsonNode subscriptionObject) {
+        String status = normalizeSubscriptionStatusValue(readText(subscriptionObject, "status"));
+        if (status == null) {
+            log.warn("Stripe customer.subscription.updated is missing a subscription status");
+            return;
+        }
+
+        updateFromSubscriptionEvent(subscriptionObject, status);
     }
 
     private void updateFromSubscriptionEvent(JsonNode object, String status) {
@@ -363,6 +374,14 @@ public class BillingService {
         }
 
         String recurringInterval = readFirstText(
+                object.path("items").path("data").path(0).path("price").path("recurring"),
+                "interval"
+        );
+        if (recurringInterval != null) {
+            return normalizeIntervalValue(recurringInterval);
+        }
+
+        recurringInterval = readFirstText(
                 object.path("lines").path("data").path(0).path("price").path("recurring"),
                 "interval"
         );
@@ -395,6 +414,16 @@ public class BillingService {
         String topLevelPriceId = readFirstText(object, "price", "id");
         if (topLevelPriceId != null) {
             return topLevelPriceId;
+        }
+
+        JsonNode items = object.path("items").path("data");
+        if (items.isArray()) {
+            for (JsonNode item : items) {
+                String priceId = readFirstText(item, "price", "id");
+                if (priceId != null) {
+                    return priceId;
+                }
+            }
         }
 
         JsonNode lines = object.path("lines").path("data");
@@ -472,6 +501,18 @@ public class BillingService {
             return YEARLY_INTERVAL;
         }
         return null;
+    }
+
+    private String normalizeSubscriptionStatusValue(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+
+        String normalizedStatus = status.trim().toUpperCase().replace('-', '_');
+        if ("CANCELED".equals(normalizedStatus) || "CANCELLED".equals(normalizedStatus)) {
+            return CANCELLED_STATUS;
+        }
+        return normalizedStatus;
     }
 
     private String nullSafe(String value) {
