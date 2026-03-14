@@ -170,6 +170,90 @@ class AuthIntegrationTests {
     }
 
     @Test
+    void getSessionHistoryReturnsCurrentUsersSessionsNewestFirst() throws Exception {
+        registerUser("history@example.com", "password123");
+        String authToken = loginAndGetAuthToken("history@example.com", "password123");
+
+        JsonNode firstSession = startInterview(authToken, "BACKEND_ENGINEER");
+        submitAnswers(authToken, firstSession);
+        JsonNode secondSession = startInterview(authToken, "DATA_SCIENTIST");
+
+        registerUser("other-history@example.com", "password123");
+        String otherAuthToken = loginAndGetAuthToken("other-history@example.com", "password123");
+        startInterview(otherAuthToken, "PRODUCT_MANAGER");
+
+        mockMvc.perform(get("/api/interviews/sessions")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(authToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value(secondSession.get("sessionId").asLong()))
+                .andExpect(jsonPath("$[0].role").value("Data Scientist"))
+                .andExpect(jsonPath("$[0].status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$[0].createdAt").isNotEmpty())
+                .andExpect(jsonPath("$[1].id").value(firstSession.get("sessionId").asLong()))
+                .andExpect(jsonPath("$[1].role").value("Backend Engineer"))
+                .andExpect(jsonPath("$[1].status").value("COMPLETED"));
+    }
+
+    @Test
+    void freeUsersCannotStartMoreThanTwoSessionsPerMonth() throws Exception {
+        registerUser("limit@example.com", "password123");
+        String authToken = loginAndGetAuthToken("limit@example.com", "password123");
+
+        startInterview(authToken, "BACKEND_ENGINEER");
+        startInterview(authToken, "DATA_SCIENTIST");
+
+        mockMvc.perform(post("/api/interviews/start")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(authToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"role":"PRODUCT_MANAGER"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("FREE_TIER_LIMIT_REACHED"))
+                .andExpect(jsonPath("$.message").value("You have used your 2 free sessions this month. Upgrade to continue practicing."));
+    }
+
+    @Test
+    void getSessionDetailReturnsOwnedSessionFeedback() throws Exception {
+        registerUser("detail@example.com", "password123");
+        String authToken = loginAndGetAuthToken("detail@example.com", "password123");
+        JsonNode startResponse = startInterview(authToken, "BACKEND_ENGINEER");
+
+        submitAnswers(authToken, startResponse);
+
+        mockMvc.perform(get("/api/interviews/sessions/{sessionId}", startResponse.get("sessionId").asLong())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(authToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(startResponse.get("sessionId").asLong()))
+                .andExpect(jsonPath("$.role").value("Backend Engineer"))
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.evaluations.length()").value(3))
+                .andExpect(jsonPath("$.evaluations[0].questionId").value(startResponse.get("questions").get(0).get("questionId").asLong()))
+                .andExpect(jsonPath("$.evaluations[0].question").isNotEmpty())
+                .andExpect(jsonPath("$.evaluations[0].answer").value("First answer"))
+                .andExpect(jsonPath("$.evaluations[0].score").value(7))
+                .andExpect(jsonPath("$.evaluations[0].feedback").value("Reasonable answer."))
+                .andExpect(jsonPath("$.evaluations[0].modelAnswer").isNotEmpty());
+    }
+
+    @Test
+    void getSessionDetailDoesNotExposeOtherUsersSession() throws Exception {
+        registerUser("owner@example.com", "password123");
+        String ownerAuthToken = loginAndGetAuthToken("owner@example.com", "password123");
+        JsonNode ownerSession = startInterview(ownerAuthToken, "BACKEND_ENGINEER");
+        submitAnswers(ownerAuthToken, ownerSession);
+
+        registerUser("viewer@example.com", "password123");
+        String viewerAuthToken = loginAndGetAuthToken("viewer@example.com", "password123");
+
+        mockMvc.perform(get("/api/interviews/sessions/{sessionId}", ownerSession.get("sessionId").asLong())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(viewerAuthToken)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Interview session not found"));
+    }
+
+    @Test
     void submitAnswersStoresAnswersForSession() throws Exception {
         registerUser("answers@example.com", "password123");
         String authToken = loginAndGetAuthToken("answers@example.com", "password123");
@@ -485,6 +569,29 @@ class AuthIntegrationTests {
                 .getContentAsString();
 
         return objectMapper.readTree(responseBody);
+    }
+
+    private void submitAnswers(String authToken, JsonNode startResponse) throws Exception {
+        long sessionId = startResponse.get("sessionId").asLong();
+        long questionOneId = startResponse.get("questions").get(0).get("questionId").asLong();
+        long questionTwoId = startResponse.get("questions").get(1).get("questionId").asLong();
+        long questionThreeId = startResponse.get("questions").get(2).get("questionId").asLong();
+
+        String submitBody = """
+                {
+                  "answers": [
+                    {"questionId": %d, "answerText": "First answer"},
+                    {"questionId": %d, "answerText": "Second answer"},
+                    {"questionId": %d, "answerText": "Third answer"}
+                  ]
+                }
+                """.formatted(questionOneId, questionTwoId, questionThreeId);
+
+        mockMvc.perform(post("/api/interviews/{sessionId}/submit", sessionId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(authToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(submitBody))
+                .andExpect(status().isCreated());
     }
 
     private String evaluationJson(int score, String strength, String weakness, String feedback) {

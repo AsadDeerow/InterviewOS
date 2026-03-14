@@ -9,6 +9,9 @@ import com.asad.interviewos.interviews.domain.SessionAnswer;
 import com.asad.interviewos.interviews.domain.SessionQuestion;
 import com.asad.interviewos.interviews.dto.QuestionDTO;
 import com.asad.interviewos.interviews.dto.QuestionEvaluationResponse;
+import com.asad.interviewos.interviews.dto.SessionDetailResponse;
+import com.asad.interviewos.interviews.dto.SessionFeedbackResponse;
+import com.asad.interviewos.interviews.dto.SessionHistoryResponse;
 import com.asad.interviewos.interviews.dto.SessionAnswerRequest;
 import com.asad.interviewos.interviews.dto.StartInterviewRequest;
 import com.asad.interviewos.interviews.dto.StartInterviewResponse;
@@ -30,6 +33,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -41,6 +46,9 @@ import java.util.stream.Collectors;
 public class InterviewService {
 
     private static final int DISPLAY_SCORE_MULTIPLIER = 10;
+    private static final Set<String> PAID_SUBSCRIPTION_STATUSES = Set.of("PRO", "ACTIVE");
+    private static final int FREE_TIER_MONTHLY_SESSION_LIMIT = 2;
+    private static final String FREE_TIER_LIMIT_REACHED = "FREE_TIER_LIMIT_REACHED";
 
     private final UserRepository userRepository;
     private final InterviewSessionRepository interviewSessionRepository;
@@ -70,6 +78,7 @@ public class InterviewService {
     public StartInterviewResponse startInterview(String userEmail, StartInterviewRequest request) {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("Authenticated user not found"));
+        enforceFreeTierLimit(user);
 
         Role role = request.getRole();
         List<QuestionBank> availableQuestions = deduplicateQuestions(questionBankRepository.findByRole(role));
@@ -103,6 +112,54 @@ public class InterviewService {
         return new StartInterviewResponse(savedSession.getId(), role, questionDtos);
     }
 
+    @Transactional(readOnly = true)
+    public List<SessionHistoryResponse> getSessionHistory(String userEmail) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new IllegalArgumentException("Authenticated user not found"));
+
+        return interviewSessionRepository.findByUserIdOrderByCreatedAtDesc(user.getId()).stream()
+                .map(SessionHistoryResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public SessionDetailResponse getSessionDetail(String userEmail, Long sessionId) {
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new IllegalArgumentException("Authenticated user not found"));
+
+        InterviewSession session = interviewSessionRepository.findByIdAndUserId(sessionId, user.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Interview session not found"));
+
+        List<SessionQuestion> sessionQuestions = sessionQuestionRepository.findBySessionIdOrderByOrderIndexAsc(sessionId);
+        Map<Long, QuestionBank> questionsById = questionBankRepository.findAllById(sessionQuestions.stream()
+                        .map(SessionQuestion::getQuestionId)
+                        .toList())
+                .stream()
+                .collect(Collectors.toMap(QuestionBank::getId, Function.identity()));
+
+        Map<Long, SessionAnswer> answersByQuestionId = sessionAnswerRepository.findBySessionIdOrderByQuestionIdAsc(sessionId)
+                .stream()
+                .collect(Collectors.toMap(SessionAnswer::getQuestionId, Function.identity()));
+
+        Map<Long, QuestionEvaluation> evaluationsByQuestionId = questionEvaluationRepository.findBySessionIdOrderByQuestionIdAsc(sessionId)
+                .stream()
+                .collect(Collectors.toMap(QuestionEvaluation::getQuestionId, Function.identity()));
+
+        List<SessionFeedbackResponse> evaluations = sessionQuestions.stream()
+                .map(sessionQuestion -> {
+                    QuestionBank question = questionsById.get(sessionQuestion.getQuestionId());
+                    return SessionFeedbackResponse.from(
+                            sessionQuestion.getQuestionId(),
+                            question != null ? question.getQuestionText() : "Question unavailable",
+                            answersByQuestionId.get(sessionQuestion.getQuestionId()),
+                            evaluationsByQuestionId.get(sessionQuestion.getQuestionId())
+                    );
+                })
+                .toList();
+
+        return SessionDetailResponse.from(session, evaluations);
+    }
+
     private List<QuestionBank> deduplicateQuestions(List<QuestionBank> questions) {
         List<QuestionBank> uniqueQuestions = new ArrayList<>();
         Set<String> seenQuestionTexts = new HashSet<>();
@@ -119,6 +176,23 @@ public class InterviewService {
 
     private String normalizeQuestionText(String questionText) {
         return questionText == null ? "" : questionText.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void enforceFreeTierLimit(User user) {
+        if (user.getSubscriptionStatus() != null
+                && PAID_SUBSCRIPTION_STATUSES.contains(user.getSubscriptionStatus().toUpperCase(Locale.ROOT))) {
+            return;
+        }
+
+        LocalDateTime startOfMonth = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+        long sessionsThisMonth = interviewSessionRepository.countByUserIdAndCreatedAtGreaterThanEqual(
+                user.getId(),
+                startOfMonth
+        );
+
+        if (sessionsThisMonth >= FREE_TIER_MONTHLY_SESSION_LIMIT) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, FREE_TIER_LIMIT_REACHED);
+        }
     }
 
     @Transactional
