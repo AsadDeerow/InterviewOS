@@ -40,8 +40,8 @@ const pricingCatalog: Record<
     eyebrow: "Core plan",
     subtitle: "Straightforward paid access for steady interview prep.",
     prices: {
-      monthly: { amount: "£9", cadence: "/ month", note: "Billed monthly" },
-      yearly: { amount: "£108", cadence: "/ year", note: "Billed yearly" },
+      monthly: { amount: "£4.99", cadence: "/ month", note: "Billed monthly" },
+      yearly: { amount: "£49.99", cadence: "/ year", note: "Billed yearly" },
     },
     features: [
       "Unlimited interview starts beyond the free-tier cap",
@@ -57,8 +57,8 @@ const pricingCatalog: Record<
     eyebrow: "Recommended",
     subtitle: "The premium tier positioned for heavier prep cycles.",
     prices: {
-      monthly: { amount: "£15", cadence: "/ month", note: "Billed monthly" },
-      yearly: { amount: "£180", cadence: "/ year", note: "Billed yearly" },
+      monthly: { amount: "£10.00", cadence: "/ month", note: "Billed monthly" },
+      yearly: { amount: "£89.00", cadence: "/ year", note: "Billed yearly" },
     },
     features: [
       "Everything in Basic with the premium subscription tier",
