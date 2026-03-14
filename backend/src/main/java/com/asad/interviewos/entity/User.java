@@ -20,6 +20,18 @@ public class User {
     @Column(nullable = false)
     private String subscriptionStatus = "FREE";
 
+    @Column(name = "subscription_plan")
+    private String subscriptionPlan;
+
+    @Column(name = "subscription_interval")
+    private String subscriptionInterval;
+
+    @Column(name = "stripe_customer_id")
+    private String stripeCustomerId;
+
+    @Column(name = "stripe_subscription_id")
+    private String stripeSubscriptionId;
+
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -38,6 +50,14 @@ public class User {
 
     public String getSubscriptionStatus() { return subscriptionStatus; }
 
+    public String getSubscriptionPlan() { return subscriptionPlan; }
+
+    public String getSubscriptionInterval() { return subscriptionInterval; }
+
+    public String getStripeCustomerId() { return stripeCustomerId; }
+
+    public String getStripeSubscriptionId() { return stripeSubscriptionId; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
 
     public void setEmail(String email) { this.email = email; }
@@ -46,5 +66,21 @@ public class User {
 
     public void setSubscriptionStatus(String subscriptionStatus) {
         this.subscriptionStatus = subscriptionStatus;
+    }
+
+    public void setSubscriptionPlan(String subscriptionPlan) {
+        this.subscriptionPlan = subscriptionPlan;
+    }
+
+    public void setSubscriptionInterval(String subscriptionInterval) {
+        this.subscriptionInterval = subscriptionInterval;
+    }
+
+    public void setStripeCustomerId(String stripeCustomerId) {
+        this.stripeCustomerId = stripeCustomerId;
+    }
+
+    public void setStripeSubscriptionId(String stripeSubscriptionId) {
+        this.stripeSubscriptionId = stripeSubscriptionId;
     }
 }
