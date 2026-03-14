@@ -33,17 +33,21 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", type = "button", asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
+    const classes = cn(
+      "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+      variantClasses[variant],
+      sizeClasses[size],
+      className
+    );
+
+    if (asChild) {
+      return <Slot className={classes} ref={ref as React.Ref<HTMLElement>} {...props} />;
+    }
 
     return (
-      <Comp
-        {...(!asChild ? { type } : {})}
-        className={cn(
-          "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
-          variantClasses[variant],
-          sizeClasses[size],
-          className
-        )}
+      <button
+        type={type}
+        className={classes}
         ref={ref}
         {...props}
       />

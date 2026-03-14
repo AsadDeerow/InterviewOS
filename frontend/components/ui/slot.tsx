@@ -2,7 +2,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 type SlotProps = React.HTMLAttributes<HTMLElement> & {
-  children: React.ReactElement;
+  children?: React.ReactNode;
 };
 
 const Slot = React.forwardRef<HTMLElement, SlotProps>(({ children, className, ...props }, ref) => {
@@ -10,10 +10,13 @@ const Slot = React.forwardRef<HTMLElement, SlotProps>(({ children, className, ..
     return null;
   }
 
-  return React.cloneElement(children, {
+  const child = children as React.ReactElement<{ className?: string; ref?: React.Ref<HTMLElement> }>;
+  const childProps = child.props as Record<string, unknown> & { className?: string };
+
+  return React.cloneElement(child, {
     ...props,
-    ...children.props,
-    className: cn(className, children.props.className),
+    ...childProps,
+    className: cn(className, childProps.className),
     ref,
   });
 });
