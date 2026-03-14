@@ -4,15 +4,15 @@ import java.util.List;
 
 public class SubmitAnswersResponse {
 
-    private final int overallScore;
+    private final double overallScore;
     private final List<QuestionEvaluationResponse> evaluations;
 
-    public SubmitAnswersResponse(int overallScore, List<QuestionEvaluationResponse> evaluations) {
+    public SubmitAnswersResponse(double overallScore, List<QuestionEvaluationResponse> evaluations) {
         this.overallScore = overallScore;
         this.evaluations = evaluations;
     }
 
-    public int getOverallScore() {
+    public double getOverallScore() {
         return overallScore;
     }
 

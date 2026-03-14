@@ -22,13 +22,18 @@ public class InterviewEvaluationService {
     private static final int MAX_SCORE = 10;
     private static final int MIN_LIST_ITEMS = 1;
     private static final int MAX_LIST_ITEMS = 3;
-    private static final int MAX_LIST_ITEM_LENGTH = 120;
-    private static final int MAX_FEEDBACK_LENGTH = 400;
-    private static final int MAX_MODEL_ANSWER_LENGTH = 800;
+    private static final int MAX_STRENGTH_LENGTH = 300;
+    private static final int MAX_WEAKNESS_LENGTH = 300;
+    private static final int MAX_FEEDBACK_LENGTH = 900;
+    private static final int MAX_MODEL_ANSWER_LENGTH = 1400;
+    private static final int MIN_FEEDBACK_QUALITY_LENGTH = 20;
+    private static final int MIN_MODEL_ANSWER_QUALITY_LENGTH = 60;
     private static final Set<String> EXPECTED_FIELDS = Set.of("score", "strengths", "weaknesses", "feedback", "modelAnswer");
     private static final Pattern TRANSCRIPT_METADATA_PATTERN = Pattern.compile(
             "(?i)(assistant\\s+to=|user\\s+to=|system\\s+to=|tool_uses|recipient_name|to=(analysis|commentary|final)|```|<\\||json\\s+id=)"
     );
+    private static final Pattern HAN_SCRIPT_PATTERN = Pattern.compile("[\\u4E00-\\u9FFF]");
+    private static final Pattern SENTENCE_LIKE_PATTERN = Pattern.compile("[.!?]");
     private static final String FALLBACK_FEEDBACK = "Evaluation unavailable due to processing error.";
     private static final String FALLBACK_MODEL_ANSWER = "Model answer unavailable due to evaluation error.";
 
@@ -115,7 +120,9 @@ public class InterviewEvaluationService {
         JsonNode modelAnswerNode = root.get("modelAnswer");
         String modelAnswer = readPlainText(modelAnswerNode, "modelAnswer", MAX_MODEL_ANSWER_LENGTH);
 
-        return new InterviewEvaluationResult(score, strengths, weaknesses, feedback, modelAnswer);
+        InterviewEvaluationResult result = new InterviewEvaluationResult(score, strengths, weaknesses, feedback, modelAnswer);
+        validateQuality(result);
+        return result;
     }
 
     private List<String> readStringList(JsonNode node, String fieldName) {
@@ -135,7 +142,13 @@ public class InterviewEvaluationService {
                 throw new IllegalArgumentException(fieldName + " must contain only strings");
             }
 
-            values.add(readPlainText(item, fieldName + " entry", MAX_LIST_ITEM_LENGTH));
+            int maxLength = switch (fieldName) {
+                case "strengths" -> MAX_STRENGTH_LENGTH;
+                case "weaknesses" -> MAX_WEAKNESS_LENGTH;
+                default -> throw new IllegalArgumentException("Unsupported list field " + fieldName);
+            };
+
+            values.add(readPlainText(item, fieldName + " entry", maxLength));
         }
 
         return values;
@@ -159,7 +172,24 @@ public class InterviewEvaluationService {
         if (TRANSCRIPT_METADATA_PATTERN.matcher(value).find()) {
             throw new IllegalArgumentException(fieldName + " contains transcript metadata");
         }
+        if (HAN_SCRIPT_PATTERN.matcher(value).find()) {
+            throw new IllegalArgumentException(fieldName + " contains non-English script");
+        }
         return value;
+    }
+
+    private void validateQuality(InterviewEvaluationResult result) {
+        validateQualityField(result.feedback(), "feedback", MIN_FEEDBACK_QUALITY_LENGTH);
+        validateQualityField(result.modelAnswer(), "modelAnswer", MIN_MODEL_ANSWER_QUALITY_LENGTH);
+    }
+
+    private void validateQualityField(String value, String fieldName, int minimumLength) {
+        if (value == null || value.length() < minimumLength) {
+            throw new IllegalArgumentException(fieldName + " must be more complete");
+        }
+        if (!SENTENCE_LIKE_PATTERN.matcher(value).find()) {
+            throw new IllegalArgumentException(fieldName + " must contain sentence-like structure");
+        }
     }
 
     private String normalizePlainText(String value) {

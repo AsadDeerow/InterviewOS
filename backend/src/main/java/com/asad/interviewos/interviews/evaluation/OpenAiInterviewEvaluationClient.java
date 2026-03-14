@@ -92,6 +92,14 @@ public class OpenAiInterviewEvaluationClient implements InterviewEvaluationClien
 
             Field values must be plain technical prose only.
 
+            All output must be written entirely in English.
+
+            Do not include Chinese characters or any other non-English script.
+
+            Use clear, complete sentences.
+
+            Do not produce sentence fragments.
+
             Never include role labels, transcript markers, tool metadata, XML tags, code fences, or JSON fragments inside any field value.
 
             Return only valid JSON matching the required schema.
@@ -179,7 +187,7 @@ public class OpenAiInterviewEvaluationClient implements InterviewEvaluationClien
                                                         "maxItems", 3,
                                                         "items", Map.of(
                                                                 "type", "string",
-                                                                "maxLength", 120
+                                                                "maxLength", 300
                                                         )
                                                 ),
                                                 "weaknesses", Map.of(
@@ -188,16 +196,16 @@ public class OpenAiInterviewEvaluationClient implements InterviewEvaluationClien
                                                         "maxItems", 3,
                                                         "items", Map.of(
                                                                 "type", "string",
-                                                                "maxLength", 120
+                                                                "maxLength", 300
                                                         )
                                                 ),
                                                 "feedback", Map.of(
                                                         "type", "string",
-                                                        "maxLength", 400
+                                                        "maxLength", 900
                                                 ),
                                                 "modelAnswer", Map.of(
                                                         "type", "string",
-                                                        "maxLength", 800
+                                                        "maxLength", 1400
                                                 )
                                         ),
                                         "required", List.of("score", "strengths", "weaknesses", "feedback", "modelAnswer")
@@ -229,11 +237,19 @@ public class OpenAiInterviewEvaluationClient implements InterviewEvaluationClien
 
                 Keep the reasoning internally consistent with the score.
 
-                Feedback must be concise, technical, and tied to specific parts of the candidate's answer.
+                Feedback must be concise, technical, tied to specific parts of the candidate's answer, and written in clear complete sentences.
 
-                Prefer one or two short sentences.
+                Keep explanations concise but complete.
 
-                Include a concise model answer showing what a strong response would look like.
+                Use 2 to 4 sentences when necessary.
+
+                Do not produce sentence fragments.
+
+                All output must be written entirely in English.
+
+                Do not include Chinese characters or any other non-English script.
+
+                Include a short model answer showing what a strong response would look like.
 
                 All field values must be plain technical prose only.
 

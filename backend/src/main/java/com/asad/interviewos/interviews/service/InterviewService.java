@@ -45,7 +45,6 @@ import java.util.stream.Collectors;
 @Service
 public class InterviewService {
 
-    private static final int DISPLAY_SCORE_MULTIPLIER = 10;
     private static final Set<String> PAID_SUBSCRIPTION_STATUSES = Set.of("PRO", "ACTIVE");
     private static final int FREE_TIER_MONTHLY_SESSION_LIMIT = 2;
     private static final String FREE_TIER_LIMIT_REACHED = "FREE_TIER_LIMIT_REACHED";
@@ -274,10 +273,10 @@ public class InterviewService {
         Map<Long, QuestionEvaluation> evaluationsByQuestionId = savedEvaluations.stream()
                 .collect(Collectors.toMap(QuestionEvaluation::getQuestionId, Function.identity()));
 
-        int overallScore = (int) Math.round(savedEvaluations.stream()
+        double overallScore = Math.round(savedEvaluations.stream()
                 .mapToInt(QuestionEvaluation::getScore)
                 .average()
-                .orElse(0) * DISPLAY_SCORE_MULTIPLIER);
+                .orElse(0) * 10.0) / 10.0;
 
         session.setStatus("EVALUATED");
         interviewSessionRepository.save(session);
@@ -314,7 +313,7 @@ public class InterviewService {
     private QuestionEvaluationResponse toResponse(QuestionEvaluation evaluation) {
         return new QuestionEvaluationResponse(
                 evaluation.getQuestionId(),
-                evaluation.getScore() * DISPLAY_SCORE_MULTIPLIER,
+                evaluation.getScore(),
                 evaluation.getStrengths(),
                 evaluation.getWeaknesses(),
                 evaluation.getFeedback(),

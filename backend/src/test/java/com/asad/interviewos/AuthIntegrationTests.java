@@ -76,7 +76,7 @@ class AuthIntegrationTests {
         interviewSessionRepository.deleteAll();
         userRepository.deleteAll();
         when(interviewEvaluationClient.evaluate(anyString(), anyString()))
-                .thenReturn(evaluationJson(7, "Correct concept", "Needs more depth", "Reasonable answer."));
+                .thenReturn(evaluationJson(7, "Correct concept", "Needs more depth", "Reasonable answer with relevant technical detail."));
     }
 
     @Test
@@ -233,7 +233,7 @@ class AuthIntegrationTests {
                 .andExpect(jsonPath("$.evaluations[0].question").isNotEmpty())
                 .andExpect(jsonPath("$.evaluations[0].answer").value("First answer"))
                 .andExpect(jsonPath("$.evaluations[0].score").value(7))
-                .andExpect(jsonPath("$.evaluations[0].feedback").value("Reasonable answer."))
+                .andExpect(jsonPath("$.evaluations[0].feedback").value("Reasonable answer with relevant technical detail."))
                 .andExpect(jsonPath("$.evaluations[0].modelAnswer").isNotEmpty());
     }
 
@@ -286,15 +286,15 @@ class AuthIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(submitBody))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.overallScore").value(77))
+                .andExpect(jsonPath("$.overallScore").value(7.7))
                 .andExpect(jsonPath("$.evaluations.length()").value(3))
                 .andExpect(jsonPath("$.evaluations[0].questionId").value(questionOneId))
-                .andExpect(jsonPath("$.evaluations[0].score").value(80))
+                .andExpect(jsonPath("$.evaluations[0].score").value(8))
                 .andExpect(jsonPath("$.evaluations[0].modelAnswer").isNotEmpty())
                 .andExpect(jsonPath("$.evaluations[1].questionId").value(questionTwoId))
-                .andExpect(jsonPath("$.evaluations[1].score").value(70))
+                .andExpect(jsonPath("$.evaluations[1].score").value(7))
                 .andExpect(jsonPath("$.evaluations[2].questionId").value(questionThreeId))
-                .andExpect(jsonPath("$.evaluations[2].score").value(80));
+                .andExpect(jsonPath("$.evaluations[2].score").value(8));
 
         assertThat(questionEvaluationRepository.findBySessionIdOrderByQuestionIdAsc(sessionId))
                 .hasSize(3)
@@ -318,7 +318,7 @@ class AuthIntegrationTests {
                         "not-json",
                         evaluationJson(7, "Correct core idea", "Missing detail", "Reasonable answer after retry."),
                         evaluationJson(8, "Good structure", "Needs stronger examples", "Clear answer overall."),
-                        evaluationJson(9, "Accurate explanation", "Minor omissions", "Strong answer.")
+                        evaluationJson(9, "Accurate explanation", "Minor omissions", "Strong answer with strong technical coverage.")
                 );
 
         String submitBody = """
@@ -336,9 +336,9 @@ class AuthIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(submitBody))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.overallScore").value(80))
+                .andExpect(jsonPath("$.overallScore").value(8.0))
                 .andExpect(jsonPath("$.evaluations[0].questionId").value(questionOneId))
-                .andExpect(jsonPath("$.evaluations[0].score").value(70))
+                .andExpect(jsonPath("$.evaluations[0].score").value(7))
                 .andExpect(jsonPath("$.evaluations[0].modelAnswer").isNotEmpty());
 
         verify(interviewEvaluationClient, times(4)).evaluate(anyString(), anyString());
@@ -357,8 +357,8 @@ class AuthIntegrationTests {
 
         when(interviewEvaluationClient.evaluate(anyString(), anyString()))
                 .thenReturn(
-                        evaluationJson(6, "Acknowledges the topic", "assistant to=final code corrupted trace", "Incomplete answer."),
-                        evaluationJson(6, "Acknowledges the topic", "Missing key mechanisms", "Incomplete answer."),
+                        evaluationJson(6, "Acknowledges the topic", "assistant to=final code corrupted trace", "Incomplete answer with missing core detail."),
+                        evaluationJson(6, "Acknowledges the topic", "Missing key mechanisms", "Incomplete answer with missing core detail."),
                         evaluationJson(8, "Good structure", "Needs deeper detail", "Clear answer overall."),
                         evaluationJson(7, "Reasonable coverage", "Missing examples", "Decent answer with gaps.")
                 );
@@ -407,8 +407,8 @@ class AuthIntegrationTests {
                 .thenReturn(
                         "not-json",
                         "still-not-json",
-                        evaluationJson(9, "Strong coverage", "Small gap", "Very good answer."),
-                        evaluationJson(6, "Some correctness", "Needs depth", "Partial answer.")
+                        evaluationJson(9, "Strong coverage", "Small gap", "Very good answer with only a small gap."),
+                        evaluationJson(6, "Some correctness", "Needs depth", "Partial answer with notable missing depth.")
                 );
 
         String submitBody = """
@@ -426,7 +426,7 @@ class AuthIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(submitBody))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.overallScore").value(50))
+                .andExpect(jsonPath("$.overallScore").value(5.0))
                 .andExpect(jsonPath("$.evaluations[0].questionId").value(questionOneId))
                 .andExpect(jsonPath("$.evaluations[0].score").value(0))
                 .andExpect(jsonPath("$.evaluations[0].weaknesses[0]").value("Evaluation unavailable"))
