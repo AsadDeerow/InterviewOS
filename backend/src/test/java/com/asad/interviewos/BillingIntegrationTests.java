@@ -4,6 +4,10 @@ import com.asad.interviewos.billing.stripe.StripeBillingClient;
 import com.asad.interviewos.billing.stripe.StripeCheckoutSession;
 import com.asad.interviewos.billing.stripe.StripeCustomer;
 import com.asad.interviewos.entity.User;
+import com.asad.interviewos.email.EmailDeliveryRepository;
+import com.asad.interviewos.email.EmailMessage;
+import com.asad.interviewos.email.EmailProvider;
+import com.asad.interviewos.email.EmailType;
 import com.asad.interviewos.interviews.repository.InterviewSessionRepository;
 import com.asad.interviewos.interviews.repository.QuestionEvaluationRepository;
 import com.asad.interviewos.interviews.repository.SessionAnswerRepository;
@@ -28,8 +32,10 @@ import java.util.HexFormat;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -53,6 +59,9 @@ class BillingIntegrationTests {
     private UserRepository userRepository;
 
     @Autowired
+    private EmailDeliveryRepository emailDeliveryRepository;
+
+    @Autowired
     private InterviewSessionRepository interviewSessionRepository;
 
     @Autowired
@@ -67,13 +76,18 @@ class BillingIntegrationTests {
     @MockitoBean
     private StripeBillingClient stripeBillingClient;
 
+    @MockitoBean
+    private EmailProvider emailProvider;
+
     @BeforeEach
     void cleanDatabase() {
         questionEvaluationRepository.deleteAll();
         sessionAnswerRepository.deleteAll();
         sessionQuestionRepository.deleteAll();
         interviewSessionRepository.deleteAll();
+        emailDeliveryRepository.deleteAll();
         userRepository.deleteAll();
+        when(emailProvider.send(any(EmailMessage.class))).thenReturn("email_payment_123");
     }
 
     @Test
@@ -178,6 +192,8 @@ class BillingIntegrationTests {
     void stripeWebhookCheckoutCompletedActivatesSubscriptionAndIsIdempotent() throws Exception {
         registerUser("webhook@example.com", "password123");
         User user = userRepository.findByEmail("webhook@example.com").orElseThrow();
+        emailDeliveryRepository.deleteAll();
+        clearInvocations(emailProvider);
 
         String payload = """
                 {
@@ -221,12 +237,23 @@ class BillingIntegrationTests {
         assertThat(updatedUser.getSubscriptionInterval()).isEqualTo("MONTHLY");
         assertThat(updatedUser.getStripeCustomerId()).isEqualTo("cus_checkout_123");
         assertThat(updatedUser.getStripeSubscriptionId()).isEqualTo("sub_checkout_123");
+        assertThat(emailDeliveryRepository.findAll())
+                .singleElement()
+                .satisfies(delivery -> {
+                    assertThat(delivery.getEmailType()).isEqualTo(EmailType.PAYMENT_CONFIRMATION);
+                    assertThat(delivery.getExternalEventId()).isEqualTo("evt_checkout_complete");
+                    assertThat(delivery.getProviderMessageId()).isEqualTo("email_payment_123");
+                    assertThat(delivery.getSentAt()).isNotNull();
+                });
+        verify(emailProvider, times(1)).send(any(EmailMessage.class));
     }
 
     @Test
     void stripeWebhookInvoicePaymentSucceededActivatesSubscriptionAndPersistsPlan() throws Exception {
         registerUser("invoice-success@example.com", "password123");
         User user = userRepository.findByEmail("invoice-success@example.com").orElseThrow();
+        emailDeliveryRepository.deleteAll();
+        clearInvocations(emailProvider);
 
         String payload = """
                 {
@@ -274,6 +301,15 @@ class BillingIntegrationTests {
         assertThat(updatedUser.getSubscriptionInterval()).isEqualTo("YEARLY");
         assertThat(updatedUser.getStripeCustomerId()).isEqualTo("cus_invoice_123");
         assertThat(updatedUser.getStripeSubscriptionId()).isEqualTo("sub_invoice_123");
+        assertThat(emailDeliveryRepository.findAll())
+                .singleElement()
+                .satisfies(delivery -> {
+                    assertThat(delivery.getEmailType()).isEqualTo(EmailType.PAYMENT_CONFIRMATION);
+                    assertThat(delivery.getExternalEventId()).isEqualTo("evt_invoice_payment_succeeded");
+                    assertThat(delivery.getProviderMessageId()).isEqualTo("email_payment_123");
+                    assertThat(delivery.getSentAt()).isNotNull();
+                });
+        verify(emailProvider, times(1)).send(any(EmailMessage.class));
     }
 
     @Test
