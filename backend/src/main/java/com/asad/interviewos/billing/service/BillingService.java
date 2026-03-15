@@ -7,6 +7,7 @@ import com.asad.interviewos.billing.stripe.StripeCheckoutSession;
 import com.asad.interviewos.billing.stripe.StripeCustomer;
 import com.asad.interviewos.billing.stripe.StripeWebhookVerifier;
 import com.asad.interviewos.entity.User;
+import com.asad.interviewos.email.EmailService;
 import com.asad.interviewos.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
@@ -14,6 +15,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +39,7 @@ public class BillingService {
     private final UserRepository userRepository;
     private final StripeBillingClient stripeBillingClient;
     private final StripeWebhookVerifier stripeWebhookVerifier;
+    private final EmailService emailService;
     private final String basicMonthly;
     private final String basicYearly;
     private final String proMonthly;
@@ -46,6 +50,7 @@ public class BillingService {
     public BillingService(UserRepository userRepository,
                           StripeBillingClient stripeBillingClient,
                           StripeWebhookVerifier stripeWebhookVerifier,
+                          EmailService emailService,
                           @Value("${stripe.price.basic.monthly}") String basicMonthly,
                           @Value("${stripe.price.basic.yearly}") String basicYearly,
                           @Value("${stripe.price.pro.monthly}") String proMonthly,
@@ -55,6 +60,7 @@ public class BillingService {
         this.userRepository = userRepository;
         this.stripeBillingClient = stripeBillingClient;
         this.stripeWebhookVerifier = stripeWebhookVerifier;
+        this.emailService = emailService;
         this.basicMonthly = basicMonthly == null ? "" : basicMonthly.trim();
         this.basicYearly = basicYearly == null ? "" : basicYearly.trim();
         this.proMonthly = proMonthly == null ? "" : proMonthly.trim();
@@ -159,21 +165,22 @@ public class BillingService {
     @Transactional
     public void handleWebhook(String payload, String signatureHeader) {
         JsonNode event = stripeWebhookVerifier.verifyAndParse(payload, signatureHeader);
+        String eventId = readText(event, "id");
         String eventType = readText(event, "type");
         JsonNode eventObject = event.path("data").path("object");
 
         switch (eventType) {
-            case "checkout.session.completed" -> handleCheckoutCompleted(eventObject);
-            case "invoice.paid" -> handleInvoicePaid(eventObject);
-            case "invoice.payment_succeeded" -> handleInvoicePaymentSucceeded(eventObject);
+            case "checkout.session.completed" -> handleCheckoutCompleted(eventId, eventObject);
+            case "invoice.paid" -> handleInvoicePaid(eventId, eventObject);
+            case "invoice.payment_succeeded" -> handleInvoicePaymentSucceeded(eventId, eventObject);
             case "invoice.payment_failed" -> handleInvoicePaymentFailed(eventObject);
             case "customer.subscription.deleted" -> handleSubscriptionDeleted(eventObject);
-            case "customer.subscription.updated" -> handleSubscriptionUpdated(eventObject);
+            case "customer.subscription.updated" -> handleSubscriptionUpdated(eventId, eventObject);
             default -> log.debug("Ignoring unsupported Stripe event type {}", eventType);
         }
     }
 
-    private void handleCheckoutCompleted(JsonNode sessionObject) {
+    private void handleCheckoutCompleted(String eventId, JsonNode sessionObject) {
         String customerId = readText(sessionObject, "customer");
         String subscriptionId = readText(sessionObject, "subscription");
         String userId = readText(sessionObject.path("metadata"), "userId");
@@ -188,7 +195,7 @@ public class BillingService {
             return;
         }
 
-        applySubscriptionState(
+        SubscriptionUpdateOutcome outcome = applySubscriptionState(
                 user.get(),
                 ACTIVE_STATUS,
                 extractPlan(sessionObject),
@@ -196,14 +203,17 @@ public class BillingService {
                 customerId,
                 subscriptionId
         );
+        schedulePaymentConfirmationEmailAfterCommit(eventId, outcome);
     }
 
-    private void handleInvoicePaid(JsonNode invoiceObject) {
-        updateFromSubscriptionEvent(invoiceObject, ACTIVE_STATUS);
+    private void handleInvoicePaid(String eventId, JsonNode invoiceObject) {
+        SubscriptionUpdateOutcome outcome = updateFromSubscriptionEvent(invoiceObject, ACTIVE_STATUS);
+        schedulePaymentConfirmationEmailAfterCommit(eventId, outcome);
     }
 
-    private void handleInvoicePaymentSucceeded(JsonNode invoiceObject) {
-        updateFromSubscriptionEvent(invoiceObject, ACTIVE_STATUS);
+    private void handleInvoicePaymentSucceeded(String eventId, JsonNode invoiceObject) {
+        SubscriptionUpdateOutcome outcome = updateFromSubscriptionEvent(invoiceObject, ACTIVE_STATUS);
+        schedulePaymentConfirmationEmailAfterCommit(eventId, outcome);
     }
 
     private void handleInvoicePaymentFailed(JsonNode invoiceObject) {
@@ -231,17 +241,18 @@ public class BillingService {
         );
     }
 
-    private void handleSubscriptionUpdated(JsonNode subscriptionObject) {
+    private void handleSubscriptionUpdated(String eventId, JsonNode subscriptionObject) {
         String status = normalizeSubscriptionStatusValue(readText(subscriptionObject, "status"));
         if (status == null) {
             log.warn("Stripe customer.subscription.updated is missing a subscription status");
             return;
         }
 
-        updateFromSubscriptionEvent(subscriptionObject, status);
+        SubscriptionUpdateOutcome outcome = updateFromSubscriptionEvent(subscriptionObject, status);
+        schedulePaymentConfirmationEmailAfterCommit(eventId, outcome);
     }
 
-    private void updateFromSubscriptionEvent(JsonNode object, String status) {
+    private SubscriptionUpdateOutcome updateFromSubscriptionEvent(JsonNode object, String status) {
         String customerId = readText(object, "customer");
         String subscriptionId = readText(object, "subscription");
         String userId = readMetadataText(object, "userId");
@@ -250,10 +261,10 @@ public class BillingService {
         Optional<User> user = findUser(customerId, subscriptionId, userId, userEmail);
         if (user.isEmpty()) {
             log.warn("Stripe billing event could not be matched to a user for status {}", status);
-            return;
+            return SubscriptionUpdateOutcome.noop();
         }
 
-        applySubscriptionState(
+        return applySubscriptionState(
                 user.get(),
                 status,
                 extractPlan(object),
@@ -293,13 +304,14 @@ public class BillingService {
         return Optional.empty();
     }
 
-    private void applySubscriptionState(User user,
-                                        String status,
-                                        String plan,
-                                        String interval,
-                                        String customerId,
-                                        String subscriptionId) {
+    private SubscriptionUpdateOutcome applySubscriptionState(User user,
+                                                             String status,
+                                                             String plan,
+                                                             String interval,
+                                                             String customerId,
+                                                             String subscriptionId) {
         boolean changed = false;
+        String currentStatus = user.getSubscriptionStatus() == null ? FREE_STATUS : user.getSubscriptionStatus();
 
         if (customerId != null && !customerId.isBlank() && !customerId.equals(user.getStripeCustomerId())) {
             user.setStripeCustomerId(customerId);
@@ -311,7 +323,6 @@ public class BillingService {
             changed = true;
         }
 
-        String currentStatus = user.getSubscriptionStatus() == null ? FREE_STATUS : user.getSubscriptionStatus();
         if (!status.equalsIgnoreCase(currentStatus)) {
             user.setSubscriptionStatus(status);
             changed = true;
@@ -330,6 +341,40 @@ public class BillingService {
         if (changed) {
             userRepository.save(user);
         }
+
+        boolean transitionedToActive = !ACTIVE_STATUS.equalsIgnoreCase(currentStatus)
+                && ACTIVE_STATUS.equalsIgnoreCase(status);
+        return new SubscriptionUpdateOutcome(
+                user.getId(),
+                transitionedToActive,
+                user.getSubscriptionPlan(),
+                user.getSubscriptionInterval()
+        );
+    }
+
+    private void schedulePaymentConfirmationEmailAfterCommit(String eventId, SubscriptionUpdateOutcome outcome) {
+        if (!outcome.transitionedToActive()) {
+            return;
+        }
+
+        Runnable emailTask = () -> emailService.sendPaymentConfirmationEmail(
+                outcome.userId(),
+                eventId,
+                outcome.plan(),
+                outcome.interval()
+        );
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            emailTask.run();
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                emailTask.run();
+            }
+        });
     }
 
     private Map<String, String> buildCustomerMetadata(User user) {
@@ -531,5 +576,11 @@ public class BillingService {
 
         String value = valueNode.asText();
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private record SubscriptionUpdateOutcome(Long userId, boolean transitionedToActive, String plan, String interval) {
+        private static SubscriptionUpdateOutcome noop() {
+            return new SubscriptionUpdateOutcome(null, false, null, null);
+        }
     }
 }

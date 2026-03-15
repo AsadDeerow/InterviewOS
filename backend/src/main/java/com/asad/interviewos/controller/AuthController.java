@@ -3,6 +3,7 @@ package com.asad.interviewos.controller;
 import com.asad.interviewos.dto.LoginRequest;
 import com.asad.interviewos.dto.RegisterRequest;
 import com.asad.interviewos.entity.User;
+import com.asad.interviewos.email.EmailService;
 import com.asad.interviewos.repository.UserRepository;
 import com.asad.interviewos.security.JwtService;
 import jakarta.validation.Valid;
@@ -20,13 +21,16 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final EmailService emailService;
 
     public AuthController(UserRepository userRepository,
                           PasswordEncoder passwordEncoder,
-                          JwtService jwtService) {
+                          JwtService jwtService,
+                          EmailService emailService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.emailService = emailService;
     }
 
     @PostMapping("/register")
@@ -40,13 +44,16 @@ public class AuthController {
         String hashedPassword = passwordEncoder.encode(request.getPassword());
         User user = new User(request.getEmail(), hashedPassword);
 
+        User savedUser;
         try {
-            userRepository.save(user);
+            savedUser = userRepository.save(user);
         } catch (DataIntegrityViolationException ex) {
             return ResponseEntity
                     .status(409)
                     .body(Map.of("message", "Email already exists"));
         }
+
+        emailService.sendWelcomeEmail(savedUser.getId());
 
         return ResponseEntity
                 .status(201)
