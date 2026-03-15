@@ -117,7 +117,7 @@ class AuthIntegrationTests {
 
     @Test
     void protectedEndpointWithoutTokenReturnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/health"))
+        mockMvc.perform(get("/api/interviews/sessions"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Unauthorized"));
     }
