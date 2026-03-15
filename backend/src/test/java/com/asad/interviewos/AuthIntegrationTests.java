@@ -3,6 +3,10 @@ package com.asad.interviewos;
 import com.asad.interviewos.interviews.domain.QuestionBank;
 import com.asad.interviewos.interviews.domain.QuestionTopic;
 import com.asad.interviewos.interviews.domain.Role;
+import com.asad.interviewos.email.EmailDeliveryRepository;
+import com.asad.interviewos.email.EmailMessage;
+import com.asad.interviewos.email.EmailProvider;
+import com.asad.interviewos.email.EmailType;
 import com.asad.interviewos.interviews.evaluation.InterviewEvaluationClient;
 import com.asad.interviewos.interviews.repository.InterviewSessionRepository;
 import com.asad.interviewos.interviews.repository.QuestionBankRepository;
@@ -25,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -48,6 +53,9 @@ class AuthIntegrationTests {
     private UserRepository userRepository;
 
     @Autowired
+    private EmailDeliveryRepository emailDeliveryRepository;
+
+    @Autowired
     private InterviewSessionRepository interviewSessionRepository;
 
     @Autowired
@@ -68,20 +76,36 @@ class AuthIntegrationTests {
     @MockitoBean
     private InterviewEvaluationClient interviewEvaluationClient;
 
+    @MockitoBean
+    private EmailProvider emailProvider;
+
     @BeforeEach
     void cleanDatabase() {
         questionEvaluationRepository.deleteAll();
         sessionAnswerRepository.deleteAll();
         sessionQuestionRepository.deleteAll();
         interviewSessionRepository.deleteAll();
+        emailDeliveryRepository.deleteAll();
         userRepository.deleteAll();
         when(interviewEvaluationClient.evaluate(anyString(), anyString()))
                 .thenReturn(evaluationJson(7, "Correct concept", "Needs more depth", "Reasonable answer with relevant technical detail."));
+        when(emailProvider.send(any(EmailMessage.class))).thenReturn("email_test_123");
     }
 
     @Test
     void registerSuccess() throws Exception {
         registerUser("test@example.com", "password123");
+
+        verify(emailProvider, times(1)).send(any(EmailMessage.class));
+        assertThat(emailDeliveryRepository.findAll())
+                .singleElement()
+                .satisfies(delivery -> {
+                    assertThat(delivery.getEmailType()).isEqualTo(EmailType.WELCOME);
+                    assertThat(delivery.getProviderMessageId()).isEqualTo("email_test_123");
+                    assertThat(delivery.getExternalEventId()).isNull();
+                    assertThat(delivery.getErrorMessage()).isNull();
+                    assertThat(delivery.getSentAt()).isNotNull();
+                });
     }
 
     @Test
@@ -100,6 +124,8 @@ class AuthIntegrationTests {
                         .content(body))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Email already exists"));
+
+        verify(emailProvider, times(1)).send(any(EmailMessage.class));
     }
 
     @Test
