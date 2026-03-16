@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { clearStoredToken, getStoredToken } from "@/lib/auth";
+import { clearStoredToken, getStoredToken, isExplicitAuthFailure } from "@/lib/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL!;
 
@@ -153,7 +153,14 @@ export function PricingSurface() {
         },
       });
 
-      if (res.status === 401) {
+      let data: BillingStatusResponse | ApiResponse = {};
+      try {
+        data = (await res.json()) as BillingStatusResponse | ApiResponse;
+      } catch {
+        data = {};
+      }
+
+      if (isExplicitAuthFailure(res.status, data)) {
         clearAuthAndRedirect();
         return;
       }
@@ -163,11 +170,10 @@ export function PricingSurface() {
         return;
       }
 
-      const data = (await res.json()) as BillingStatusResponse;
-      setBillingStatus(data);
+      setBillingStatus(data as BillingStatusResponse);
 
-      const currentPlan = normalizeBillingPlan(data.subscriptionPlan);
-      const currentInterval = normalizeBillingInterval(data.subscriptionInterval);
+      const currentPlan = normalizeBillingPlan((data as BillingStatusResponse).subscriptionPlan);
+      const currentInterval = normalizeBillingInterval((data as BillingStatusResponse).subscriptionInterval);
       if (currentPlan) {
         setSelectedPlan(currentPlan);
       }
@@ -237,7 +243,7 @@ export function PricingSurface() {
         data = {};
       }
 
-      if (res.status === 401) {
+      if (isExplicitAuthFailure(res.status, data)) {
         clearAuthAndRedirect();
         return;
       }

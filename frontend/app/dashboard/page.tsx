@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardShell, type DashboardTabKey } from "@/components/dashboard-shell";
-import { clearStoredToken, getStoredToken } from "@/lib/auth";
+import { clearStoredToken, getStoredToken, isExplicitAuthFailure } from "@/lib/auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL!;
 
@@ -191,7 +191,14 @@ export default function DashboardPage() {
           },
         });
 
-        if (res.status === 401) {
+        let data: BillingStatusResponse | ApiResponse = {};
+        try {
+          data = (await res.json()) as BillingStatusResponse | ApiResponse;
+        } catch {
+          data = {};
+        }
+
+        if (isExplicitAuthFailure(res.status, Array.isArray(data) ? undefined : data)) {
           clearAuthAndRedirect();
           return;
         }
@@ -200,8 +207,7 @@ export default function DashboardPage() {
           return;
         }
 
-        const data = (await res.json()) as BillingStatusResponse;
-        setBillingStatus(data);
+        setBillingStatus(data as BillingStatusResponse);
       } catch {
         // Workspace still renders if billing status cannot be loaded.
       }
@@ -234,7 +240,7 @@ export default function DashboardPage() {
         data = { message: "Could not load session history." };
       }
 
-      if (res.status === 401) {
+      if (isExplicitAuthFailure(res.status, !Array.isArray(data) ? data : undefined)) {
         clearAuthAndRedirect();
         return;
       }
@@ -284,7 +290,7 @@ export default function DashboardPage() {
         data = { message: "Could not start interview." };
       }
 
-      if (res.status === 401) {
+      if (isExplicitAuthFailure(res.status, !Array.isArray(data) ? data : undefined)) {
         clearAuthAndRedirect();
         return;
       }
@@ -350,7 +356,7 @@ export default function DashboardPage() {
         data = { message: "Could not load session feedback." };
       }
 
-      if (res.status === 401) {
+      if (isExplicitAuthFailure(res.status, !Array.isArray(data) ? data : undefined)) {
         clearAuthAndRedirect();
         return;
       }
@@ -429,7 +435,7 @@ export default function DashboardPage() {
         data = { message: "Could not submit answers." };
       }
 
-      if (res.status === 401) {
+      if (isExplicitAuthFailure(res.status, !Array.isArray(data) ? data : undefined)) {
         clearAuthAndRedirect();
         return;
       }
@@ -532,7 +538,14 @@ export default function DashboardPage() {
           },
         });
 
-        if (res.status === 401) {
+        let data: ApiResponse = {};
+        try {
+          data = (await res.json()) as ApiResponse;
+        } catch {
+          data = {};
+        }
+
+        if (isExplicitAuthFailure(res.status, data)) {
           clearAuthAndRedirect();
           return;
         }
