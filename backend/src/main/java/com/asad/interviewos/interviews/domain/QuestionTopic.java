@@ -1,9 +1,18 @@
 package com.asad.interviewos.interviews.domain;
 public enum QuestionTopic {
 
+    ANALYTICS,
     API_DESIGN,
+    ARCHITECTURE,
+    CACHING,
     DATABASES,
     CONCURRENCY,
+    CUSTOMERS,
+    EXECUTION,
+    EXPERIMENTATION,
+    FEATURE_ENGINEERING,
+    MESSAGING,
+    ML_SYSTEMS,
     SYSTEM_DESIGN,
     SECURITY,
 
@@ -11,8 +20,11 @@ public enum QuestionTopic {
     MACHINE_LEARNING,
     DATA_CLEANING,
     MODEL_EVALUATION,
+    MODELING,
+    PERFORMANCE,
 
     PRODUCT_SENSE,
+    PRODUCT_STRATEGY,
     METRICS,
     ROADMAP,
     STAKEHOLDERS
