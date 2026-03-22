@@ -110,7 +110,7 @@ public class OpenAiInterviewEvaluationClient implements InterviewEvaluationClien
     private final String model;
 
     public OpenAiInterviewEvaluationClient(
-            @Value("${app.evaluation.openai.api-key:${OPENAI_API_KEY:}}") String apiKey,
+            @Value("${app.evaluation.openai.api-key:${DEEPSEEK_API_KEY:}}") String apiKey,
             @Value("${app.evaluation.openai.base-url:https://api.openai.com/v1}") String baseUrl,
             @Value("${app.evaluation.openai.model:gpt-5.4-2026-03-05}") String model,
             @Value("${app.evaluation.openai.timeout-seconds:30}") long timeoutSeconds) {
@@ -134,11 +134,11 @@ public class OpenAiInterviewEvaluationClient implements InterviewEvaluationClien
     @Override
     public String evaluate(String questionText, String sanitizedAnswerText) {
         if (apiKey.isBlank()) {
-            throw new IllegalStateException("OpenAI API key is not configured");
+            throw new IllegalStateException("API key is not configured");
         }
 
         JsonNode response = restClient.post()
-                .uri("/responses")
+                .uri("/chat/completions")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(buildRequestBody(questionText, sanitizedAnswerText))
@@ -147,7 +147,7 @@ public class OpenAiInterviewEvaluationClient implements InterviewEvaluationClien
 
         String outputText = extractOutputText(response);
         if (outputText == null || outputText.isBlank()) {
-            throw new IllegalStateException("OpenAI response did not include output text");
+            throw new IllegalStateException("LLM response did not include output text");
         }
 
         return outputText;
@@ -157,60 +157,10 @@ public class OpenAiInterviewEvaluationClient implements InterviewEvaluationClien
         return Map.of(
                 "model", model,
                 "temperature", 0,
-                "input", List.of(
-                        Map.of(
-                                "role", "system",
-                                "content", List.of(Map.of("type", "input_text", "text", SYSTEM_PROMPT))
-                        ),
-                        Map.of(
-                                "role", "user",
-                                "content", List.of(Map.of("type", "input_text", "text", buildUserPrompt(questionText, sanitizedAnswerText)))
-                        )
-                ),
-                "text", Map.of(
-                        "format", Map.of(
-                                "type", "json_schema",
-                                "name", "question_evaluation",
-                                "strict", true,
-                                "schema", Map.of(
-                                        "type", "object",
-                                        "additionalProperties", false,
-                                        "properties", Map.of(
-                                                "score", Map.of(
-                                                        "type", "integer",
-                                                        "minimum", 0,
-                                                        "maximum", 10
-                                                ),
-                                                "strengths", Map.of(
-                                                        "type", "array",
-                                                        "minItems", 1,
-                                                        "maxItems", 3,
-                                                        "items", Map.of(
-                                                                "type", "string",
-                                                                "maxLength", 300
-                                                        )
-                                                ),
-                                                "weaknesses", Map.of(
-                                                        "type", "array",
-                                                        "minItems", 1,
-                                                        "maxItems", 3,
-                                                        "items", Map.of(
-                                                                "type", "string",
-                                                                "maxLength", 300
-                                                        )
-                                                ),
-                                                "feedback", Map.of(
-                                                        "type", "string",
-                                                        "maxLength", 900
-                                                ),
-                                                "modelAnswer", Map.of(
-                                                        "type", "string",
-                                                        "maxLength", 1400
-                                                )
-                                        ),
-                                        "required", List.of("score", "strengths", "weaknesses", "feedback", "modelAnswer")
-                                )
-                        )
+                "response_format", Map.of("type", "json_object"),
+                "messages", List.of(
+                        Map.of("role", "system", "content", SYSTEM_PROMPT),
+                        Map.of("role", "user", "content", buildUserPrompt(questionText, sanitizedAnswerText))
                 )
         );
     }
@@ -281,29 +231,18 @@ public class OpenAiInterviewEvaluationClient implements InterviewEvaluationClien
             return null;
         }
 
-        JsonNode outputTextNode = response.get("output_text");
-        if (outputTextNode != null && outputTextNode.isTextual() && !outputTextNode.asText().isBlank()) {
-            return outputTextNode.asText();
-        }
-
-        JsonNode outputNode = response.get("output");
-        if (outputNode == null || !outputNode.isArray()) {
-            return null;
-        }
-
-        for (JsonNode outputItem : outputNode) {
-            JsonNode contentNode = outputItem.get("content");
-            if (contentNode == null || !contentNode.isArray()) {
-                continue;
-            }
-
-            for (JsonNode contentItem : contentNode) {
-                String type = contentItem.path("type").asText();
-                if ("output_text".equals(type) && contentItem.has("text")) {
-                    return contentItem.get("text").asText();
+        // Standard chat completions format: choices[0].message.content
+        JsonNode choices = response.get("choices");
+        if (choices != null && choices.isArray() && !choices.isEmpty()) {
+            JsonNode message = choices.get(0).get("message");
+            if (message != null) {
+                JsonNode refusal = message.get("refusal");
+                if (refusal != null && !refusal.isNull() && !refusal.asText().isBlank()) {
+                    throw new IllegalStateException("LLM refused the evaluation request");
                 }
-                if ("refusal".equals(type)) {
-                    throw new IllegalStateException("OpenAI refused the evaluation request");
+                JsonNode content = message.get("content");
+                if (content != null && content.isTextual() && !content.asText().isBlank()) {
+                    return content.asText();
                 }
             }
         }

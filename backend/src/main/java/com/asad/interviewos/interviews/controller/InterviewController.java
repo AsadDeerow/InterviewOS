@@ -15,8 +15,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import com.asad.interviewos.interviews.domain.Role;
+import com.asad.interviewos.entity.User;
+import com.asad.interviewos.repository.UserRepository;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -26,11 +30,16 @@ public class InterviewController {
     private static final String FREE_TIER_LIMIT_REACHED = "FREE_TIER_LIMIT_REACHED";
     private static final String FREE_TIER_LIMIT_MESSAGE =
             "You have used your 2 free sessions this month. Upgrade to continue practicing.";
+    private static final String BASIC_TIER_LIMIT_REACHED = "BASIC_TIER_LIMIT_REACHED";
+    private static final String BASIC_TIER_LIMIT_MESSAGE =
+            "You have used your 25 Basic sessions this month. Upgrade to Pro for unlimited practice.";
 
     private final InterviewService interviewService;
+    private final UserRepository userRepository;
 
-    public InterviewController(InterviewService interviewService) {
+    public InterviewController(InterviewService interviewService, UserRepository userRepository) {
         this.interviewService = interviewService;
+        this.userRepository = userRepository;
     }
 
     @PostMapping("/start")
@@ -46,6 +55,12 @@ public class InterviewController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
                         "error", FREE_TIER_LIMIT_REACHED,
                         "message", FREE_TIER_LIMIT_MESSAGE
+                ));
+            }
+            if (ex.getStatusCode() == HttpStatus.FORBIDDEN && BASIC_TIER_LIMIT_REACHED.equals(ex.getReason())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                        "error", BASIC_TIER_LIMIT_REACHED,
+                        "message", BASIC_TIER_LIMIT_MESSAGE
                 ));
             }
             return ResponseEntity.status(ex.getStatusCode()).body(Map.of("message", ex.getReason()));
@@ -71,6 +86,26 @@ public class InterviewController {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
         } catch (ResponseStatusException ex) {
             return ResponseEntity.status(ex.getStatusCode()).body(Map.of("message", ex.getReason()));
+        }
+    }
+
+    @GetMapping("/topics")
+    public ResponseEntity<?> getTopics(Authentication authentication) {
+        try {
+            User user = userRepository.findByEmail(authentication.getName()).orElse(null);
+            if (user == null || user.getRole() == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "No role assigned"));
+            }
+            Role role;
+            try {
+                role = Role.valueOf(user.getRole());
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Invalid role"));
+            }
+            List<Map<String, Object>> topics = interviewService.getTopicsForRole(role);
+            return ResponseEntity.ok(topics);
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
         }
     }
 

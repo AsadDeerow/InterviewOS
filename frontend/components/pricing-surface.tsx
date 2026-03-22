@@ -44,10 +44,10 @@ const pricingCatalog: Record<
       yearly: { amount: "£49.99", cadence: "/ year", note: "Billed yearly" },
     },
     features: [
-      "Unlimited interview starts beyond the free-tier cap",
+      "25 interview sessions per month",
       "Stored session history and replayable feedback",
-      "Current AI evaluation flow with written feedback",
-      "Monthly or yearly billing through Stripe Checkout",
+      "AI evaluation with written feedback per question",
+      "Topic-filtered practice across all categories",
     ],
     recommended: false,
     cardClass: "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-950/70",
@@ -61,10 +61,10 @@ const pricingCatalog: Record<
       yearly: { amount: "£89.00", cadence: "/ year", note: "Billed yearly" },
     },
     features: [
-      "Everything in Basic with the premium subscription tier",
-      "Premium plan state saved directly on your account",
-      "Best fit for higher-frequency practice cycles",
-      "Priority for richer reporting rollouts as they ship",
+      "Unlimited interview sessions per month",
+      "Everything in Basic included",
+      "No monthly caps — practice as much as you need",
+      "Best for intensive interview prep cycles",
     ],
     recommended: true,
     cardClass:

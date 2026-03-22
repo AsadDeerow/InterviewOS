@@ -9,6 +9,8 @@ public class SessionFeedbackResponse {
 
     private final Long questionId;
     private final String question;
+    private final String topic;
+    private final String difficulty;
     private final String answer;
     private final Integer score;
     private final String feedback;
@@ -18,6 +20,8 @@ public class SessionFeedbackResponse {
 
     public SessionFeedbackResponse(Long questionId,
                                    String question,
+                                   String topic,
+                                   String difficulty,
                                    String answer,
                                    Integer score,
                                    String feedback,
@@ -26,6 +30,8 @@ public class SessionFeedbackResponse {
                                    String modelAnswer) {
         this.questionId = questionId;
         this.question = question;
+        this.topic = topic;
+        this.difficulty = difficulty;
         this.answer = answer;
         this.score = score;
         this.feedback = feedback;
@@ -36,11 +42,15 @@ public class SessionFeedbackResponse {
 
     public static SessionFeedbackResponse from(Long questionId,
                                                String question,
+                                               String topic,
+                                               String difficulty,
                                                SessionAnswer answer,
                                                QuestionEvaluation evaluation) {
         return new SessionFeedbackResponse(
                 questionId,
                 question,
+                topic,
+                difficulty,
                 answer != null ? answer.getAnswerText() : "",
                 evaluation != null ? evaluation.getScore() : null,
                 evaluation != null ? evaluation.getFeedback() : null,
@@ -56,6 +66,14 @@ public class SessionFeedbackResponse {
 
     public String getQuestion() {
         return question;
+    }
+
+    public String getTopic() {
+        return topic;
+    }
+
+    public String getDifficulty() {
+        return difficulty;
     }
 
     public String getAnswer() {

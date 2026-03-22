@@ -32,6 +32,8 @@ public class User {
     @Column(name = "stripe_subscription_id")
     private String stripeSubscriptionId;
 
+    private String role;
+
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -83,4 +85,8 @@ public class User {
     public void setStripeSubscriptionId(String stripeSubscriptionId) {
         this.stripeSubscriptionId = stripeSubscriptionId;
     }
+
+    public String getRole() { return role; }
+
+    public void setRole(String role) { this.role = role; }
 }

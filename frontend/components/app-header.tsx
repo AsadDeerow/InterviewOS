@@ -7,19 +7,23 @@ import { AuthNavLinks } from "@/components/auth-nav-links";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { LogOut } from "lucide-react";
 
-const publicRoutes = new Set(["/", "/login", "/register"]);
+const publicRoutes = new Set(["/", "/login", "/register", "/terms", "/privacy"]);
 
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(true);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
 
     function handleScroll() {
       const currentScrollY = window.scrollY;
+
+      setScrolled(currentScrollY > 8);
 
       if (currentScrollY < 24) {
         setIsVisible(true);
@@ -49,23 +53,41 @@ export function AppHeader() {
   return (
     <header
       className={cn(
-        "fixed inset-x-0 top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-md transition-transform duration-300 dark:border-white/10 dark:bg-[#0f172a]/90",
-        isVisible ? "translate-y-0" : "-translate-y-full"
+        "fixed inset-x-0 top-0 z-30 flex justify-center px-4 transition-all duration-300 sm:px-6",
+        isVisible ? "translate-y-0" : "-translate-y-[calc(100%+16px)]",
+        scrolled ? "pt-3" : "pt-4",
       )}
     >
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-        <Link href="/" className="group flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-[var(--brand-primary)] shadow-[0_0_12px_rgba(107,114,128,0.35)] transition group-hover:scale-110 dark:bg-[#3b82f6] dark:shadow-[0_0_18px_rgba(59,130,246,0.45)]" />
-          <span className="text-xl font-semibold tracking-tight text-[var(--heading)] dark:text-[var(--heading)]">InterviewOS</span>
+      <div
+        className={cn(
+          "flex w-full max-w-5xl items-center justify-between rounded-2xl px-5 py-3 transition-all duration-300",
+          scrolled
+            ? "border border-slate-200/60 bg-white/80 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-[#0f172a]/80 dark:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.3)]"
+            : "bg-transparent",
+        )}
+      >
+        <Link href="/" className="group flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--brand-primary)] dark:bg-[#3b5bcc]">
+            <span className="text-xs font-bold text-white">IO</span>
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight text-[var(--heading)] dark:text-[var(--heading)]">
+            InterviewOS
+          </span>
           <span className="hidden rounded-full border border-slate-300 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-[var(--muted-foreground)] dark:border-white/10 dark:text-[var(--muted-foreground)] sm:inline-block">
             beta
           </span>
         </Link>
 
-        <nav className="flex items-center gap-3 text-sm">
+        <nav className="flex items-center gap-2">
           {showAuthLinks ? <AuthNavLinks /> : null}
           {showLogout ? (
-            <Button variant="outline" onClick={handleLogout}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--heading)]"
+            >
+              <LogOut className="h-3.5 w-3.5" />
               Logout
             </Button>
           ) : null}

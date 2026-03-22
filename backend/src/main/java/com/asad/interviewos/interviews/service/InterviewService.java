@@ -30,11 +30,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.asad.interviewos.interviews.domain.QuestionTopic;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -45,9 +48,12 @@ import java.util.stream.Collectors;
 @Service
 public class InterviewService {
 
+    private static final int QUESTIONS_PER_SESSION = 5;
     private static final Set<String> PAID_SUBSCRIPTION_STATUSES = Set.of("PRO", "ACTIVE");
     private static final int FREE_TIER_MONTHLY_SESSION_LIMIT = 2;
+    private static final int BASIC_TIER_MONTHLY_SESSION_LIMIT = 25;
     private static final String FREE_TIER_LIMIT_REACHED = "FREE_TIER_LIMIT_REACHED";
+    private static final String BASIC_TIER_LIMIT_REACHED = "BASIC_TIER_LIMIT_REACHED";
 
     private final UserRepository userRepository;
     private final InterviewSessionRepository interviewSessionRepository;
@@ -79,15 +85,13 @@ public class InterviewService {
                 .orElseThrow(() -> new IllegalArgumentException("Authenticated user not found"));
         enforceFreeTierLimit(user);
 
-        Role role = request.getRole();
-        List<QuestionBank> availableQuestions = deduplicateQuestions(questionBankRepository.findByRole(role));
-
-        if (availableQuestions.size() < 3) {
-            throw new IllegalArgumentException("Not enough unique questions available for role " + role);
+        // Use user's stored role, fall back to request role for backwards compatibility
+        Role role = resolveRole(user, request.getRole());
+        if (role == null) {
+            throw new IllegalArgumentException("No role assigned. Please select a role first.");
         }
 
-        Collections.shuffle(availableQuestions);
-        List<QuestionBank> selectedQuestions = availableQuestions.subList(0, 3);
+        List<QuestionBank> selectedQuestions = selectQuestions(role, request.getTopic());
 
         InterviewSession session = new InterviewSession();
         session.setUserId(user.getId());
@@ -105,7 +109,7 @@ public class InterviewService {
         }
 
         List<QuestionDTO> questionDtos = selectedQuestions.stream()
-                .map(question -> new QuestionDTO(question.getId(), question.getQuestionText()))
+                .map(question -> new QuestionDTO(question.getId(), question.getQuestionText(), question.getDifficulty()))
                 .toList();
 
         return new StartInterviewResponse(savedSession.getId(), role, questionDtos);
@@ -150,6 +154,8 @@ public class InterviewService {
                     return SessionFeedbackResponse.from(
                             sessionQuestion.getQuestionId(),
                             question != null ? question.getQuestionText() : "Question unavailable",
+                            question != null && question.getTopic() != null ? question.getTopic().name() : null,
+                            question != null ? question.getDifficulty() : null,
                             answersByQuestionId.get(sessionQuestion.getQuestionId()),
                             evaluationsByQuestionId.get(sessionQuestion.getQuestionId())
                     );
@@ -157,6 +163,73 @@ public class InterviewService {
                 .toList();
 
         return SessionDetailResponse.from(session, evaluations);
+    }
+
+    private Role resolveRole(User user, Role requestRole) {
+        if (user.getRole() != null) {
+            try {
+                return Role.valueOf(user.getRole());
+            } catch (IllegalArgumentException ignored) {
+                // fall through
+            }
+        }
+        return requestRole;
+    }
+
+    private List<QuestionBank> selectQuestions(Role role, QuestionTopic topic) {
+        if (topic != null) {
+            // Topic-priority: get topic questions first, fill from rest of role
+            List<QuestionBank> topicQuestions = deduplicateQuestions(
+                    questionBankRepository.findByRoleAndTopic(role, topic));
+            Collections.shuffle(topicQuestions);
+
+            List<QuestionBank> allRoleQuestions = deduplicateQuestions(
+                    questionBankRepository.findByRole(role));
+            Collections.shuffle(allRoleQuestions);
+
+            // Merge: topic questions first, then fill from role pool
+            Set<Long> selectedIds = new HashSet<>();
+            List<QuestionBank> selected = new ArrayList<>();
+
+            for (QuestionBank q : topicQuestions) {
+                if (selected.size() >= QUESTIONS_PER_SESSION) break;
+                if (selectedIds.add(q.getId())) {
+                    selected.add(q);
+                }
+            }
+            for (QuestionBank q : allRoleQuestions) {
+                if (selected.size() >= QUESTIONS_PER_SESSION) break;
+                if (selectedIds.add(q.getId())) {
+                    selected.add(q);
+                }
+            }
+
+            if (selected.size() < QUESTIONS_PER_SESSION) {
+                throw new IllegalArgumentException("Not enough unique questions available for role " + role);
+            }
+            return selected;
+        }
+
+        // No topic: original behavior
+        List<QuestionBank> availableQuestions = deduplicateQuestions(questionBankRepository.findByRole(role));
+        if (availableQuestions.size() < QUESTIONS_PER_SESSION) {
+            throw new IllegalArgumentException("Not enough unique questions available for role " + role);
+        }
+        Collections.shuffle(availableQuestions);
+        return availableQuestions.subList(0, QUESTIONS_PER_SESSION);
+    }
+
+    public List<Map<String, Object>> getTopicsForRole(Role role) {
+        List<QuestionBank> questions = deduplicateQuestions(questionBankRepository.findByRole(role));
+        Map<String, Long> topicCounts = new LinkedHashMap<>();
+        for (QuestionBank q : questions) {
+            if (q.getTopic() != null) {
+                topicCounts.merge(q.getTopic().name(), 1L, Long::sum);
+            }
+        }
+        return topicCounts.entrySet().stream()
+                .map(e -> Map.<String, Object>of("topic", e.getKey(), "questionCount", e.getValue()))
+                .toList();
     }
 
     private List<QuestionBank> deduplicateQuestions(List<QuestionBank> questions) {
@@ -178,8 +251,13 @@ public class InterviewService {
     }
 
     private void enforceFreeTierLimit(User user) {
-        if (user.getSubscriptionStatus() != null
-                && PAID_SUBSCRIPTION_STATUSES.contains(user.getSubscriptionStatus().toUpperCase(Locale.ROOT))) {
+        String status = user.getSubscriptionStatus() != null
+                ? user.getSubscriptionStatus().toUpperCase(Locale.ROOT) : "FREE";
+        String plan = user.getSubscriptionPlan() != null
+                ? user.getSubscriptionPlan().toUpperCase(Locale.ROOT) : null;
+
+        // Pro plan = unlimited
+        if (PAID_SUBSCRIPTION_STATUSES.contains(status) && "PRO".equals(plan)) {
             return;
         }
 
@@ -189,6 +267,15 @@ public class InterviewService {
                 startOfMonth
         );
 
+        // Basic plan = 10/month
+        if (PAID_SUBSCRIPTION_STATUSES.contains(status) && "BASIC".equals(plan)) {
+            if (sessionsThisMonth >= BASIC_TIER_MONTHLY_SESSION_LIMIT) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, BASIC_TIER_LIMIT_REACHED);
+            }
+            return;
+        }
+
+        // Free tier = 2/month
         if (sessionsThisMonth >= FREE_TIER_MONTHLY_SESSION_LIMIT) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, FREE_TIER_LIMIT_REACHED);
         }

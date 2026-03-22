@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  LayoutDashboard,
+  MessageSquare,
+  Clock,
+  CreditCard,
+  Settings,
+} from "lucide-react";
 
 export type DashboardNavItemKey = "workspace" | "interview" | "history" | "pricing" | "settings";
 export type DashboardTabKey = Exclude<DashboardNavItemKey, "pricing">;
@@ -17,31 +24,32 @@ const navItems: Array<{
   key: DashboardNavItemKey;
   label: string;
   href: string;
+  icon: React.ElementType;
 }> = [
-  { key: "workspace", label: "Workspace", href: "/dashboard" },
-  { key: "interview", label: "Interview", href: "/dashboard#interview" },
-  { key: "history", label: "History", href: "/dashboard#history" },
-  { key: "pricing", label: "Pricing", href: "/dashboard/pricing" },
-  { key: "settings", label: "Settings", href: "/dashboard#settings" },
+  { key: "workspace", label: "Workspace", href: "/dashboard", icon: LayoutDashboard },
+  { key: "interview", label: "Interview", href: "/dashboard#interview", icon: MessageSquare },
+  { key: "history", label: "History", href: "/dashboard#history", icon: Clock },
+  { key: "pricing", label: "Pricing", href: "/dashboard/pricing", icon: CreditCard },
+  { key: "settings", label: "Settings", href: "/dashboard#settings", icon: Settings },
 ];
 
 export function DashboardShell({ activeItem, onTabSelect, children }: DashboardShellProps) {
   return (
     <section className="mx-auto max-w-7xl">
       <div className="flex flex-col gap-6 lg:flex-row">
-        <aside className="w-full rounded-[30px] border border-slate-200 bg-white/90 p-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-slate-950/70 lg:sticky lg:top-24 lg:w-64 lg:self-start">
-          <div className="px-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-              Workspace
+        <aside className="w-full rounded-[20px] border border-slate-200 bg-white/95 p-3 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-slate-950/70 lg:sticky lg:top-24 lg:w-56 lg:self-start">
+          <div className="px-3 pb-1 pt-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+              Navigation
             </p>
-            <p className="mt-3 text-2xl font-semibold text-[var(--heading)] dark:text-white">InterviewOS</p>
           </div>
 
-          <nav className="mt-6 grid gap-2">
+          <nav className="mt-2 grid gap-0.5">
             {navItems.map((item) => {
               const isActive = item.key === activeItem;
+              const Icon = item.icon;
               const className = cn(
-                "h-12 w-full justify-start rounded-[18px] px-4 text-sm font-medium transition-all",
+                "h-10 w-full justify-start gap-3 rounded-xl px-3 text-[13px] font-medium transition-all",
                 isActive && "shadow-[0_14px_30px_-20px_rgba(37,99,235,0.55)]",
               );
 
@@ -55,6 +63,7 @@ export function DashboardShell({ activeItem, onTabSelect, children }: DashboardS
                     className={className}
                     onClick={() => onTabSelect(tabKey)}
                   >
+                    <Icon className="h-4 w-4 flex-none" />
                     {item.label}
                   </Button>
                 );
@@ -62,7 +71,10 @@ export function DashboardShell({ activeItem, onTabSelect, children }: DashboardS
 
               return (
                 <Button key={item.key} asChild variant={isActive ? "default" : "ghost"} className={className}>
-                  <Link href={item.href}>{item.label}</Link>
+                  <Link href={item.href}>
+                    <Icon className="h-4 w-4 flex-none" />
+                    {item.label}
+                  </Link>
                 </Button>
               );
             })}
